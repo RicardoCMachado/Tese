@@ -1,0 +1,75 @@
+2025-12-21 12:39:21 [INFO    ] root                 - Logging configurado (nível: INFO, ficheiro: C:\Users\ricar\Desktop\Tese\firetec-multithread\logs\firetec_20251221.log)
+2025-12-21 12:39:21 [INFO    ] __main__             - Inicializando servidor...
+2025-12-21 12:39:21 [INFO    ] src.services.antenna_service - Carregadas 714 estações de rádio
+2025-12-21 12:39:29 [INFO    ] src.services.location_service - Carregadas 171977 localidades
+2025-12-21 12:39:29 [INFO    ] src.core.alert_processor - AlertProcessor inicializado com 5 workers
+2025-12-21 12:39:29 [INFO    ] src.core.alert_processor - Iniciando workers...
+2025-12-21 12:39:29 [INFO    ] src.core.alert_processor - Worker-1 iniciado
+2025-12-21 12:39:29 [INFO    ] src.core.alert_processor - Worker-2 iniciado
+2025-12-21 12:39:29 [INFO    ] src.core.alert_processor - Worker-3 iniciado
+2025-12-21 12:39:29 [INFO    ] src.core.alert_processor - Worker-4 iniciado
+2025-12-21 12:39:29 [INFO    ] src.core.alert_processor - Worker-5 iniciado
+2025-12-21 12:39:29 [INFO    ] src.core.alert_processor - 5 workers iniciados
+2025-12-21 12:39:43 [INFO    ] src.core.alert_processor - Alerta ALERT-20251221-123943-a30d12 submetido (prioridade: NORMAL)
+2025-12-21 12:39:43 [INFO    ] src.core.alert_processor - Worker-5 processando ALERT-20251221-123943-a30d12
+2025-12-21 12:39:43 [INFO    ] src.core.alert_processor - [ALERT-20251221-123943-a30d12] Iniciando processamento
+2025-12-21 12:39:43 [INFO    ] src.services.antenna_service - Procurando antenas próximas a (39.868306, -7.526667)
+2025-12-21 12:39:43 [INFO    ] src.services.antenna_service - Encontradas 6 estações (raio final: 25.0km)
+2025-12-21 12:39:43 [INFO    ] src.core.alert_processor - [ALERT-20251221-123943-a30d12] Antenas encontradas: 5
+2025-12-21 12:39:43 [INFO    ] src.services.location_service - Determinando localidade para (39.868306, -7.526667)
+2025-12-21 12:39:44 [INFO    ] src.services.location_service - Localidade encontrada (proximidade): Malpica Do Tejo, Castelo Branco, Castelo Branco
+2025-12-21 12:39:44 [INFO    ] src.core.alert_processor - [ALERT-20251221-123943-a30d12] Localidade: Malpica Do Tejo, Castelo Branco, Castelo Branco
+2025-12-21 12:39:44 [INFO    ] src.services.road_service - Procurando estradas próximas a (39.868306, -7.526667)
+2025-12-21 12:39:49 [INFO    ] src.services.road_service - Encontradas 1 estradas (raio final: 2000m)
+2025-12-21 12:39:49 [INFO    ] src.core.alert_processor - [ALERT-20251221-123943-a30d12] Estradas encontradas: 1
+2025-12-21 12:39:49 [INFO    ] src.core.alert_processor - [ALERT-20251221-123943-a30d12] Mensagem: Alerta de Incêndio na Freguesia de Malpica Do Tejo, no Concelho de Castelo Branco, no Distrito de Castelo Branco, cuidado ao circular na estrada ER 112
+2025-12-21 12:39:49 [INFO    ] src.core.alert_processor - [ALERT-20251221-123943-a30d12] Processado com sucesso em 5.54s
+2025-12-21 12:39:49 [INFO    ] __main__             - ✓ ALERTA COMPLETO: ALERT-20251221-123943-a30d12
+2025-12-21 12:39:49 [INFO    ] __main__             -   Localização: Malpica Do Tejo, Castelo Branco, Castelo Branco
+2025-12-21 12:39:49 [INFO    ] __main__             -   Antenas: 5
+2025-12-21 12:39:49 [INFO    ] __main__             -   Estradas: 1
+2025-12-21 12:39:49 [INFO    ] __main__             -   Tempo: 5.54s
+2025-12-21 12:39:49 [INFO    ] __main__             -   Mensagem: Alerta de Incêndio na Freguesia de Malpica Do Tejo, no Concelho de Castelo Branco, no Distrito de Castelo Branco, cuidado ao circular na estrada ER 112
+2025-12-21 12:42:50 [INFO    ] src.core.alert_processor - Parando workers...
+2025-12-21 12:42:50 [INFO    ] src.core.alert_processor - Worker-5 terminado
+2025-12-21 12:42:50 [INFO    ] src.core.alert_processor - Worker-2 terminado
+2025-12-21 12:42:50 [INFO    ] src.core.alert_processor - Worker-4 terminado
+2025-12-21 12:42:51 [INFO    ] src.core.alert_processor - Worker-1 terminado
+2025-12-21 12:42:51 [INFO    ] src.core.alert_processor - Worker-3 terminado
+2025-12-21 12:42:51 [INFO    ] src.core.alert_processor - Todos os workers parados
+2025-12-21 12:42:51 [INFO    ] __main__             - Servidor encerrado
+2025-12-21 12:52:08 [WARNING ] src.services.transmission_service - [ALERT-20251221-125154-ff70d8] Timeout ao conectar a 192.168.0.22
+2025-12-21 12:53:26 [ERROR   ] src.services.road_service - Erro ao consultar Overpass API: Server load too high
+2025-12-21 12:53:39 [WARNING ] src.services.transmission_service - [ALERT-20251221-125316-cd96f1] Timeout ao conectar a 192.168.0.22
+2025-12-21 12:53:45 [WARNING ] src.services.transmission_service - [ALERT-20251221-125316-cd96f1] Timeout ao conectar a 192.168.0.22
+2025-12-21 12:53:50 [WARNING ] src.services.transmission_service - [ALERT-20251221-125316-cd96f1] Timeout ao conectar a 192.168.0.22
+2025-12-21 12:53:50 [ERROR   ] src.services.transmission_service - [ALERT-20251221-125316-cd96f1] ✗ Switch 192.168.0.22 FALHOU após 3 tentativas
+2025-12-21 12:53:55 [WARNING ] src.services.transmission_service - [ALERT-20251221-125316-cd96f1] Timeout ao conectar a 192.168.0.21
+2025-12-21 12:54:01 [WARNING ] src.services.transmission_service - [ALERT-20251221-125316-cd96f1] Timeout ao conectar a 192.168.0.21
+2025-12-21 12:54:06 [WARNING ] src.services.transmission_service - [ALERT-20251221-125316-cd96f1] Timeout ao conectar a 192.168.0.21
+2025-12-21 12:54:06 [ERROR   ] src.services.transmission_service - [ALERT-20251221-125316-cd96f1] ✗ Switch 192.168.0.21 FALHOU após 3 tentativas
+2025-12-21 12:54:06 [WARNING ] src.core.alert_processor - [ALERT-20251221-125316-cd96f1] Falha na transmissão para todos os switches
+2025-12-21 12:54:11 [ERROR   ] src.services.road_service - Erro ao consultar Overpass API: Server load too high
+2025-12-21 12:54:15 [ERROR   ] src.services.road_service - Erro ao consultar Overpass API: Server load too high
+2025-12-21 12:54:19 [ERROR   ] src.services.road_service - Erro ao consultar Overpass API: Server load too high
+2025-12-21 12:54:23 [ERROR   ] src.services.road_service - Erro ao consultar Overpass API: Server load too high
+2025-12-21 12:54:27 [ERROR   ] src.services.road_service - Erro ao consultar Overpass API: Server load too high
+2025-12-21 12:54:32 [ERROR   ] src.services.road_service - Erro ao consultar Overpass API: Server load too high
+2025-12-21 12:54:36 [ERROR   ] src.services.road_service - Erro ao consultar Overpass API: Server load too high
+2025-12-21 12:54:40 [ERROR   ] src.services.road_service - Erro ao consultar Overpass API: Server load too high
+2025-12-21 12:54:44 [ERROR   ] src.services.road_service - Erro ao consultar Overpass API: Server load too high
+2025-12-21 12:55:04 [WARNING ] src.services.transmission_service - [ALERT-20251221-125316-14ba54] Timeout ao conectar a 192.168.0.22
+2025-12-21 12:55:10 [WARNING ] src.services.transmission_service - [ALERT-20251221-125316-14ba54] Timeout ao conectar a 192.168.0.22
+2025-12-21 12:55:15 [WARNING ] src.services.transmission_service - [ALERT-20251221-125316-14ba54] Timeout ao conectar a 192.168.0.22
+2025-12-21 12:55:15 [ERROR   ] src.services.transmission_service - [ALERT-20251221-125316-14ba54] ✗ Switch 192.168.0.22 FALHOU após 3 tentativas
+2025-12-21 12:55:20 [WARNING ] src.services.transmission_service - [ALERT-20251221-125316-14ba54] Timeout ao conectar a 192.168.0.21
+2025-12-21 12:55:26 [WARNING ] src.services.transmission_service - [ALERT-20251221-125316-14ba54] Timeout ao conectar a 192.168.0.21
+2025-12-21 12:55:31 [WARNING ] src.services.transmission_service - [ALERT-20251221-125316-14ba54] Timeout ao conectar a 192.168.0.21
+2025-12-21 12:55:31 [ERROR   ] src.services.transmission_service - [ALERT-20251221-125316-14ba54] ✗ Switch 192.168.0.21 FALHOU após 3 tentativas
+2025-12-21 12:55:31 [WARNING ] src.core.alert_processor - [ALERT-20251221-125316-14ba54] Falha na transmissão para todos os switches
+2025-12-21 12:55:42 [WARNING ] src.services.transmission_service - [ALERT-20251221-125316-8afd12] Timeout ao conectar a 192.168.0.22
+2025-12-21 12:55:48 [WARNING ] src.services.transmission_service - [ALERT-20251221-125316-8afd12] Timeout ao conectar a 192.168.0.22
+2025-12-21 12:55:53 [WARNING ] src.services.transmission_service - [ALERT-20251221-125316-8afd12] Timeout ao conectar a 192.168.0.22
+2025-12-21 12:55:53 [ERROR   ] src.services.transmission_service - [ALERT-20251221-125316-8afd12] ✗ Switch 192.168.0.22 FALHOU após 3 tentativas
+2025-12-21 12:55:58 [WARNING ] src.services.transmission_service - [ALERT-20251221-125316-8afd12] Timeout ao conectar a 192.168.0.21
+2025-12-21 12:56:04 [WARNING ] src.services.transmission_service - [ALERT-20251221-125316-8afd12] Timeout ao conectar a 192.168.0.21
