@@ -1,13 +1,13 @@
 """
 FireTec Multithread Server - Sistema Principal
-Dissertação de Mestrado - Ricardo
+Dissertação de Mestrado - Ricardo Machado
 """
-import logging
 import sys
-import os
+import signal
+import logging
+import random
 from pathlib import Path
 
-# Adicionar src ao path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from src.models.alert import ServerConfig, Coordinates, AlertPriority
@@ -19,6 +19,9 @@ from src.utils.menu import MainMenu
 # Configurar logging
 setup_logging()
 logger = logging.getLogger(__name__)
+
+# Flag global para shutdown suave
+shutdown_requested = False
 
 
 def on_alert_complete(alert):
@@ -45,18 +48,35 @@ def on_alert_failed(alert):
     print(f"Erro: {alert.error_message}\n")
 
 
+def signal_handler(sig, frame):
+    """Handler para Ctrl+C - shutdown suave"""
+    global shutdown_requested
+    if not shutdown_requested:
+        shutdown_requested = True
+        print("\n\n⚠️  Shutdown solicitado (Ctrl+C)...")
+        print("🔄 Aguardando conclusão de alertas ativos...")
+        print("💡 Pressione Ctrl+C novamente para forçar encerramento\n")
+    else:
+        print("\n❌ Encerrando imediatamente...")
+        sys.exit(1)
+
+
 def main():
     """Função principal"""
+    # Registrar handler para Ctrl+C
+    signal.signal(signal.SIGINT, signal_handler)
+    print()
     print("="*70)
     print("  FIRETEC MULTITHREAD SERVER  ".center(70))
     print("  Sistema de Alerta de Incêndios por Rádio FM  ".center(70))
     print("="*70)
     print()
     print("Dissertação de Mestrado - 2025/2026")
-    print("Aluno: Ricardo")
+    print("Aluno: Ricardo Machado")
     print("Orientador: Prof. António Navarro")
     print()
     print("="*70)
+    print()
     print()
     
     # Verificar ficheiros de dados
@@ -74,7 +94,7 @@ def main():
     config = ServerConfig(
         antenna_csv=str(data_dir / "123.csv"),
         localities_csv=str(data_dir / "Localidades_Portugal.csv"),
-        max_workers=5,  # Começar com 5 workers
+        max_workers=5,  
         queue_size=50
     )
     
@@ -89,21 +109,12 @@ def main():
     # Iniciar workers
     processor.start()
     
-    # Iniciar API REST (opcional)
-    print("\n🌐 Iniciar API REST? (s/n) [s]: ", end="")
-    try:
-        start_api = input().strip().lower()
-        if start_api != 'n':
-            api = FireTecAPI(processor, host="0.0.0.0", port=5000)
-            api.start()
-            print("   ✅ API REST disponível em http://localhost:5000")
-            print("   📖 Documentação:")
-            print("      POST /api/alert - Criar alerta")
-            print("      GET  /api/alert/<id> - Ver status")
-            print("      GET  /api/alerts - Listar alertas")
-            print("      GET  /api/statistics - Estatísticas")
-    except:
-        pass
+    # Iniciar API REST
+    print("\n🌐 Iniciando API REST...")
+    api = FireTecAPI(processor, host="0.0.0.0", port=5000)
+    api.start()
+    print("   ✅ API REST disponível em http://localhost:5000")
+    print("   📖 Documentação interativa em http://localhost:5000/")
     
     try:
         # Menu interativo
@@ -111,11 +122,19 @@ def main():
         menu.run()
     
     except KeyboardInterrupt:
-        print("\n\n⚠️  Interrupção detectada (Ctrl+C)")
+        # Já tratado pelo signal_handler, mas mantém para compatibilidade
+        pass
+    
+    except Exception as e:
+        logger.error(f"Erro fatal: {e}", exc_info=True)
+        print(f"\n❌ ERRO FATAL: {e}")
     
     finally:
         # Parar processador
-        print("\n🛑 Parando servidor...")
+        if not shutdown_requested:
+            print("\n🛑 Encerrando servidor...")
+        
+        logger.info("Parando processador de alertas...")
         processor.stop()
         
         # Estatísticas finais

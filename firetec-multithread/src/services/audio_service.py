@@ -43,7 +43,7 @@ class AudioService:
         logger.info(f"[{alert_id}] Gerando áudio: '{text[:50]}...'")
         
         try:
-            # Gerar ficheiro MP3 com gTTS (sem pydub para Python 3.14)
+            # Gerar ficheiro MP3 com gTTS
             output_file = self.output_dir / f"{alert_id}.mp3"
             
             tts = gTTS(text=text, lang=self.language)

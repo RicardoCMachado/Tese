@@ -309,9 +309,9 @@ class AlertProcessor:
                             f"todos os switches"
                         )
             
-            # Se não houver CAP ou test_mode, marcar apenas como processado
+            # Se não foi transmitido, marcar como processado
             if alert.status != AlertStatus.SENT:
-                alert.status = AlertStatus.SENT if self.config.test_mode else AlertStatus.PROCESSED
+                alert.status = AlertStatus.PROCESSED
             metrics.mark_complete()
             alert.processing_time = metrics.duration
             

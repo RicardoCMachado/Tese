@@ -3,6 +3,7 @@ Serviço para busca de estradas próximas
 """
 import pandas as pd
 import overpy
+import time
 from typing import List
 from ..models.alert import Coordinates, Road, ServerConfig
 import logging
@@ -48,6 +49,10 @@ class RoadService:
             attempt += 1
             
             try:
+                # Delay entre requisições para evitar "Server load too high"
+                if attempt > 1:
+                    time.sleep(2)  # Aguardar 2 segundos entre tentativas
+                
                 roads = self._query_overpass(coordinates, search_radius)
                 
                 logger.debug(
@@ -58,8 +63,17 @@ class RoadService:
                     search_radius += self.config.road_radius_increment
             
             except Exception as e:
-                logger.error(f"Erro ao consultar Overpass API: {e}")
-                search_radius += self.config.road_radius_increment
+                error_msg = str(e).lower()
+                if "server load too high" in error_msg or "rate limit" in error_msg:
+                    logger.warning(
+                        f"Overpass API sobrecarregada (tentativa {attempt}/{max_attempts}). "
+                        f"Aguardando antes de retry..."
+                    )
+                    time.sleep(5)  # Aguardar 5 segundos em caso de sobrecarga
+                    search_radius += self.config.road_radius_increment
+                else:
+                    logger.error(f"Erro ao consultar Overpass API: {e}")
+                    search_radius += self.config.road_radius_increment
         
         if len(roads) == 0:
             logger.warning("Nenhuma estrada encontrada")
