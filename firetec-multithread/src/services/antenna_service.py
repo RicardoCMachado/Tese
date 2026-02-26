@@ -24,17 +24,32 @@ class AntennaService:
             data = pd.read_csv(self.config.antenna_csv)
             
             for _, row in data.iterrows():
-                station = RadioStation(
-                    ps=str(row["PS"]),
-                    pi=str(row["PI"]),
-                    frequency=float(row["Frequência [MHz]"]),
-                    latitude=float(row["Latitude Corrigida"]),
-                    longitude=float(row["Longitude Corrigida"]),
-                    coverage_radius=float(row["Raio [Km]"]),
-                    concelho=str(row["Concelho"]),
-                    distrito=str(row["Distrito"])
-                )
-                self.stations.append(station)
+                # CRITICAL FIX: Validar dados antes de criar estação
+                try:
+                    # Verificar se campos obrigatórios existem e não são NaN
+                    if (pd.notna(row["PS"]) and pd.notna(row["PI"]) and 
+                        pd.notna(row["Frequência [MHz]"]) and
+                        pd.notna(row["Latitude Corrigida"]) and 
+                        pd.notna(row["Longitude Corrigida"]) and
+                        pd.notna(row["Raio [Km]"])):
+                        
+                        station = RadioStation(
+                            ps=str(row["PS"]),
+                            pi=str(row["PI"]),
+                            frequency=float(row["Frequência [MHz]"]),
+                            latitude=float(row["Latitude Corrigida"]),
+                            longitude=float(row["Longitude Corrigida"]),
+                            coverage_radius=float(row["Raio [Km]"]),
+                            concelho=str(row.get("Concelho", "")),
+                            distrito=str(row.get("Distrito", ""))
+                        )
+                        self.stations.append(station)
+                except (KeyError, ValueError, TypeError) as e:
+                    logger.debug(f"Erro ao processar estação (linha ignorada): {e}")
+                    continue
+            
+            if len(self.stations) == 0:
+                raise ValueError("Nenhuma estação válida carregada do CSV")
             
             logger.info(f"Carregadas {len(self.stations)} estações de rádio")
         

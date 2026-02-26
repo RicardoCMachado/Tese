@@ -12,7 +12,6 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 from src.models.alert import ServerConfig, Coordinates, AlertPriority
 from src.core.alert_processor import AlertProcessor
-from src.api.rest_api import FireTecAPI
 from src.utils.logger import setup_logging
 from src.utils.menu import MainMenu
 
@@ -95,7 +94,8 @@ def main():
         antenna_csv=str(data_dir / "123.csv"),
         localities_csv=str(data_dir / "Localidades_Portugal.csv"),
         max_workers=5,  
-        queue_size=50
+        queue_size=50,
+        test_mode=False  # Se True: desativa chamadas externas (Overpass + Switches)
     )
     
     # Criar processador
@@ -108,13 +108,6 @@ def main():
     
     # Iniciar workers
     processor.start()
-    
-    # Iniciar API REST
-    print("\n🌐 Iniciando API REST...")
-    api = FireTecAPI(processor, host="0.0.0.0", port=5000)
-    api.start()
-    print("   ✅ API REST disponível em http://localhost:5000")
-    print("   📖 Documentação interativa em http://localhost:5000/")
     
     try:
         # Menu interativo

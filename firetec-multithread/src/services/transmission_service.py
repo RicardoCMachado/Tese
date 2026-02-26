@@ -145,10 +145,14 @@ class TransmissionService:
                 result['error'] = error_msg
             
             finally:
+                # CRITICAL FIX: Garantir que socket é sempre fechado
                 try:
                     sock.close()
-                except:
+                except (NameError, AttributeError):
+                    # Socket pode não ter sido criado se falhou antes de socket.socket()
                     pass
+                except Exception as e:
+                    logger.debug(f"Erro ao fechar socket: {e}")
             
             # Aguardar antes de retry (exceto na última tentativa)
             if attempt < self.retry_attempts:

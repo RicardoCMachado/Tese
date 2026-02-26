@@ -112,21 +112,30 @@ class CAPService:
     def _add_rds_parameters(self, info, alert: FireAlert):
         """
         Adiciona parâmetros RDS (Radio Data System) ao CAP
+        COMPATIBILIDADE: Usa estações reais do alerta (como código original Rodolfo)
         
         Args:
             info: Objeto capparser.element.Info
             alert: Alerta de incêndio
         """
-        # PS (Program Service) - Nome da estação
-        ps_value = "FIRETEC1"  # Pode ser incrementado
+        # CRITICAL FIX: Usar PS/PI das estações reais encontradas (compatibilidade com Rodolfo)
+        if alert.nearby_stations and len(alert.nearby_stations) > 0:
+            # Usar primeira estação encontrada
+            station = alert.nearby_stations[0]
+            ps_value = station.ps
+            pi_value = station.pi
+        else:
+            # Fallback: usar valores de teste
+            ps_value = "FIRETEC1"
+            pi_value = "8400"
+            logger.warning(f"[{alert.alert_id}] Nenhuma estação encontrada, usando PS/PI de teste")
+        
         param_ps = capparser.element.Parameter(
             parameterName="PS",
             parameterValue=ps_value
         )
         info.addParameter(param_ps)
         
-        # PI (Program Identification)
-        pi_value = "8400"  # Pode ser incrementado (84XX)
         param_pi = capparser.element.Parameter(
             parameterName="PI",
             parameterValue=pi_value
@@ -136,12 +145,14 @@ class CAPService:
         # AF (Alternative Frequencies)
         frequencies = alert.get_frequencies()
         
-        # Adicionar frequências de laboratório
-        frequencies.extend([100.0, 102.0])
+        # CRITICAL FIX: Apenas adicionar frequências de lab se não houver reais
+        if not frequencies or len(frequencies) == 0:
+            frequencies = [100.0, 102.0]  # Laboratório
+            logger.warning(f"[{alert.alert_id}] Usando frequências de laboratório")
         
         if frequencies:
-            # Usar primeira frequência (ou todas separadas por vírgula)
-            af_value = str(frequencies[0]) if len(frequencies) > 0 else "100.0"
+            # Usar primeira frequência real encontrada
+            af_value = str(frequencies[0])
             
             param_af = capparser.element.Parameter(
                 parameterName="AF",
@@ -165,7 +176,8 @@ class CAPService:
         try:
             resource = capparser.Resource()
             resource.setResourceDesc("Audio Message")
-            resource.setMimeType("audio/wav")
+            # CRITICAL FIX: Usar MIME type correto para MP3
+            resource.setMimeType("audio/mpeg")
             
             # Converter bytes para string hexadecimal
             hex_data = binascii.hexlify(audio_bytes).decode('utf8')

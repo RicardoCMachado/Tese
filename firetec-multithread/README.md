@@ -37,33 +37,33 @@ Desenvolver um sistema multithread de alerta de incêndios que utilize a rede de
 
 ## 📊 Estado Atual
 
-### ✅ Implementado (95%)
+### ✅ Implementado (98% - Atualizado 26 Fev 2026)
 
 **Core do Sistema:**
-- Arquitetura multithread com 5 workers
+- Arquitetura multithread com 5 workers **✅ THREAD-SAFE**
 - Sistema de prioridades (LOW, NORMAL, HIGH, CRITICAL)
 - Fila de processamento com PriorityQueue
 - Logging completo
 - Shutdown suave (Ctrl+C)
 
 **Serviços:**
-- `AntennaService` - 714 estações FM
-- `LocationService` - 171,977 localidades de Portugal
-- `RoadService` - Estradas próximas via Overpass API
+- `AntennaService` - 714 estações FM **✅ Com validação de dados**
+- `LocationService` - 171,977 localidades **✅ Thread-safe (Nominatim por request)**
+- `RoadService` - Estradas próximas via Overpass API **✅ Thread-safe**
 - `AudioService` - Mensagens de voz em português
-- `CAPService` - Geração de XML CAP
-- `TransmissionService` - Envio para switches FireTec
+- `CAPService` - Geração de XML CAP **✅ PS/PI de estações reais**
+- `TransmissionService` - Envio para switches FireTec **✅ Socket sempre fechado**
 
-**API REST:**
-- FastAPI com Swagger UI
-- Endpoints: criar alerta, consultar status, estatísticas
-- Documentação automática em `/`
+**Interface:**
+- Menu interativo via terminal
+- Opções: criar alerta manual, aleatório, múltiplos alertas
+- Visualização de estatísticas em tempo real
 
 ### ⏳ Pendente
 
 **Sistema:**
-- Testes com switches FireTec reais
-- Interface web React
+- Testes com switches FireTec reais **(prioridade máxima)**
+- Interface web React (opcional)
 - Testes de carga e stress
 
 **Dissertação:**
@@ -72,6 +72,19 @@ Desenvolver um sistema multithread de alerta de incêndios que utilize a rede de
 - Análise de resultados
 - Discussão e conclusões
 - Trabalho futuro
+
+---
+
+## 🔧 Correções Críticas (26 Fev 2026)
+
+### Problemas Corrigidos:
+1. ✅ **Thread Safety**: Nominatim e Overpass API agora thread-safe (criados por request)
+2. ✅ **Switch Compatibility**: PS/PI de estações reais em vez de hardcoded
+3. ✅ **Socket Management**: Sempre fechado corretamente
+4. ✅ **Data Validation**: CSV com validação de campos obrigatórios
+5. ✅ **MIME Types**: audio/mpeg correto para MP3
+
+**📄 Detalhes**: Ver documentação completa em SECURITY_AND_IMPROVEMENTS.md
 
 ---
 
@@ -85,8 +98,13 @@ pip install -r requirements.txt
 python main.py
 ```
 
-**API REST:** http://localhost:5000  
-**Documentação:** http://localhost:5000/ (Swagger UI)
+**Menu Interativo**:
+- Opção 1: Inserir coordenadas manualmente
+- Opção 2: Gerar coordenadas aleatórias
+- Opção 3: Local de alerta em Cacia
+- Opção 4: Múltiplos alertas (teste de carga)
+- Opção 5: Mostrar status
+- Opção 6: Estatísticas
 
 ---
 
@@ -119,12 +137,12 @@ python main.py
 ### 5 Junho 2026
 - [ ] **Entrega da dissertação**
 
----
-
-## 🛠️ Tecnologias
-
-- **Python 3.14**
-- **FastAPI** - API REST
+---Geopy** - Geolocalização
+- **gTTS** - Text-to-Speech
+- **Overpass API** - OpenStreetMap
+- **CAP Parser** - Common Alerting Protocol
+- **Threading** - Processamento paralelo
+- **Pandas** - Processamento de dados
 - **Geopy** - Geolocalização
 - **gTTS** - Text-to-Speech
 - **Overpass API** - OpenStreetMap

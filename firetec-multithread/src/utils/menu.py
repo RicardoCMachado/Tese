@@ -132,7 +132,7 @@ class MainMenu:
         print("-" * 60)
         
         try:
-            num = int(input("Quantos alertas criar? [3]: ").strip() or "3")
+            num = int(input("Quantos alertas criar?: ").strip() or "3")
             
             if num > 20:
                 print("⚠️  Limite: 20 alertas")

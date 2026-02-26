@@ -18,7 +18,8 @@ class LocationService:
         self.config = config
         self.localities_data = []
         self._load_localities()
-        self.geocoder = Nominatim(user_agent='FireTec_Server')
+        # THREAD SAFETY: Não criar geocoder aqui - será criado por thread
+        self.user_agent = 'FireTec_Server'
     
     def _load_localities(self):
         """Carrega base de dados de localidades"""
@@ -73,11 +74,14 @@ class LocationService:
     def _try_reverse_geocoding(self, coordinates: Coordinates) -> Optional[Location]:
         """
         Tenta obter localidade via geocoding reverso (Nominatim)
+        THREAD SAFETY: Criar novo geocoder por requisição (Nominatim não é thread-safe)
         """
         try:
-            result = self.geocoder.reverse(
+            # CRITICAL FIX: Criar geocoder por thread para evitar race conditions
+            geocoder = Nominatim(user_agent=self.user_agent)
+            result = geocoder.reverse(
                 (coordinates.latitude, coordinates.longitude),
-                timeout=10
+                timeout=5  # Reduzido de 10s para 5s
             )
             
             if not result:

@@ -16,7 +16,8 @@ class RoadService:
     
     def __init__(self, config: ServerConfig):
         self.config = config
-        self.api = overpy.Overpass()
+        # THREAD SAFETY: Não criar API aqui - será criado por thread
+        self.overpass_url = "https://overpass-api.de/api/interpreter"
     
     def find_nearby_roads(
         self,
@@ -49,9 +50,9 @@ class RoadService:
             attempt += 1
             
             try:
-                # Delay entre requisições para evitar "Server load too high"
+                # Delay entre requisições para evitar "Too many requests"
                 if attempt > 1:
-                    time.sleep(2)  # Aguardar 2 segundos entre tentativas
+                    time.sleep(5)  # Aguardar 5 segundos entre tentativas (aumentado)
                 
                 roads = self._query_overpass(coordinates, search_radius)
                 
@@ -64,12 +65,12 @@ class RoadService:
             
             except Exception as e:
                 error_msg = str(e).lower()
-                if "server load too high" in error_msg or "rate limit" in error_msg:
+                if "server load too high" in error_msg or "rate limit" in error_msg or "too many requests" in error_msg:
                     logger.warning(
                         f"Overpass API sobrecarregada (tentativa {attempt}/{max_attempts}). "
-                        f"Aguardando antes de retry..."
+                        f"Aguardando 10 segundos antes de retry..."
                     )
-                    time.sleep(5)  # Aguardar 5 segundos em caso de sobrecarga
+                    time.sleep(10)  # Aguardar 10 segundos em caso de rate limit
                     search_radius += self.config.road_radius_increment
                 else:
                     logger.error(f"Erro ao consultar Overpass API: {e}")
@@ -100,6 +101,9 @@ class RoadService:
         Returns:
             Lista de estradas
         """
+        # THREAD SAFETY: Criar nova instância Overpass por requisição
+        api = overpy.Overpass(url=self.overpass_url)
+        
         # Query Overpass para estradas principais
         query = f"""(
             way
@@ -107,7 +111,7 @@ class RoadService:
             [highway~"^(motorway|trunk|primary|secondary|tertiary)$"];
         >;);out;"""
         
-        result = self.api.query(query)
+        result = api.query(query)
         
         # Extrair informação das estradas
         roads_data = []

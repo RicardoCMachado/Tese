@@ -2,6 +2,7 @@
 Serviço para geração de mensagens de áudio
 """
 import os
+import time
 from pathlib import Path
 from typing import Optional
 from gtts import gTTS
@@ -84,8 +85,6 @@ class AudioService:
         Args:
             max_age_hours: Idade máxima dos ficheiros em horas
         """
-        import time
-        
         now = time.time()
         max_age_seconds = max_age_hours * 3600
         
