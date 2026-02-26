@@ -10,10 +10,12 @@
 
 | Fase | Período | Estado |
 |------|---------|--------|
-| **Desenvolvimento do Sistema** | Set 2025 - Abr 2026 | 🔄 Em curso |
-| **Testes e Validação** | Mai 2026 | 🔄 Em curso |
-| **Escrita da Dissertação** | Mai 2026 - 5 Jun 2026 | ⏳ Pendente |
-| **Entrega Final** | **6 Junho 2026** | ⏳ Pendente |
+| **Desenvolvimento Técnico Final** | 26 Fev - 6 Abr 2026 | 🔄 Em curso (39 dias) |
+| **Torneios (pausa técnica)** | 7 Abr - 21 Abr 2026 | ⏸️ Só escrita (15 dias) |
+| **Escrita da Dissertação** | 22 Abr - 5 Jun 2026 | ⏳ Pendente (45 dias) |
+| **Entrega Final** | **6 Junho 2026** | 🎯 Deadline |
+
+> **Nota:** Durante os torneios (7-21 Abr), apenas trabalho de escrita será realizado.
 
 ---
 
@@ -29,15 +31,13 @@ Desenvolver um sistema multithread de alerta de incêndios que utilize a rede de
 - ✅ Deteção de estradas afetadas via OpenStreetMap
 - ✅ Geração de áudio em português (gTTS)
 - ✅ Protocolo CAP (Common Alerting Protocol)
-- ✅ API REST para integração externa
-- ⏳ Interface web de monitorização
 - ⏳ Testes com hardware FireTec real
 
 ---
 
 ## 📊 Estado Atual
 
-### ✅ Implementado (98% - Atualizado 26 Fev 2026)
+### ✅ Implementado (92% - Atualizado 26 Fev 2026)
 
 **Core do Sistema:**
 - Arquitetura multithread com 5 workers **✅ THREAD-SAFE**
@@ -63,7 +63,8 @@ Desenvolver um sistema multithread de alerta de incêndios que utilize a rede de
 
 **Sistema:**
 - Testes com switches FireTec reais **(prioridade máxima)**
-- Interface web React (opcional)
+- Otimização de rate limiting da Overpass API
+- Caching de resultados de geocoding
 - Testes de carga e stress
 
 **Dissertação:**
@@ -120,22 +121,31 @@ python main.py
 
 ## 📝 Tarefas Prioritárias
 
-### Até 30 Abril 2026
-- [ ] Testes com hardware real
-- [ ] Interface web completa
+### Até 6 Abril 2026 (Desenvolvimento Técnico)
+- [ ] Testes com hardware FireTec real
+- [ ] Otimização de rate limiting (Overpass API)
 - [ ] Métricas de performance finais
 - [ ] Screenshots e vídeos de demonstração
+- [ ] Documentação técnica completa
 
-### Maio 2026 (Escrita)
-- [ ] Introdução e contexto
-- [ ] Estado da arte
+### 7-21 Abril 2026 (Torneios - Apenas Escrita)
+- [ ] Rascunho de introdução e contexto
+- [ ] Rascunho de estado da arte
+- [ ] Esboço de arquitetura do sistema
+- [ ] Documentação de testes realizados
+
+### 22 Abril - 5 Junho 2026 (Escrita Intensiva)
+- [ ] Introdução e contexto (finalizar)
+- [ ] Estado da arte (finalizar)
 - [ ] Arquitetura e implementação
 - [ ] Testes e validação
-- [ ] Conclusões
-- [ ] Revisão final
+- [ ] Análise de resultados
+- [ ] Conclusões e trabalho futuro
+- [ ] Revisão completa
+- [ ] Formatação final
 
-### 5 Junho 2026
-- [ ] **Entrega da dissertação**
+### 6 Junho 2026
+- [ ] **🎯 Entrega da dissertação**
 
 ---Geopy** - Geolocalização
 - **gTTS** - Text-to-Speech
