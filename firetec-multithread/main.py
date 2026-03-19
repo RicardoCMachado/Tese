@@ -6,7 +6,14 @@ import sys
 import signal
 import logging
 import random
+import os
 from pathlib import Path
+from typing import List
+
+try:
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover - fallback se dependency faltar
+    load_dotenv = None
 
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
@@ -15,12 +22,55 @@ from src.core.alert_processor import AlertProcessor
 from src.utils.logger import setup_logging
 from src.utils.menu import MainMenu
 
+if load_dotenv is not None:
+    # Permite configurar VM via ficheiro .env sem editar código
+    load_dotenv(Path(__file__).parent / ".env")
+
+
+def _configure_console_encoding():
+    """Evita erros de encoding em terminais Windows/Linux."""
+    for stream_name in ("stdout", "stderr"):
+        stream = getattr(sys, stream_name, None)
+        if stream is None:
+            continue
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            try:
+                reconfigure(encoding="utf-8", errors="replace")
+            except Exception:
+                # Mantém comportamento padrão se o terminal não suportar reconfigure
+                pass
+
+
+_configure_console_encoding()
+
 # Configurar logging
 setup_logging()
 logger = logging.getLogger(__name__)
 
 # Flag global para shutdown suave
 shutdown_requested = False
+
+
+def _env_int(name: str, default: int) -> int:
+    """Lê inteiro de variável de ambiente com fallback seguro."""
+    value = os.getenv(name)
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        logger.warning(f"Variável {name} inválida ('{value}'). Usando {default}.")
+        return default
+
+
+def _env_list(name: str, default: List[str]) -> List[str]:
+    """Lê lista CSV de variável de ambiente."""
+    value = os.getenv(name)
+    if value is None:
+        return default
+    parsed = [item.strip() for item in value.split(",") if item.strip()]
+    return parsed or default
 
 
 def on_alert_complete(alert):
@@ -89,13 +139,24 @@ def main():
         print("⚠️  AVISO: Ficheiro 'Localidades_Portugal.csv' não encontrado")
         print()
     
-    # Configuração
+    # Configuração (VM-friendly via variáveis de ambiente)
+    default_switch_ips = ["192.168.0.22", "192.168.0.21"]
+    switch_ips = _env_list("FIRETEC_SWITCH_IPS", default_switch_ips)
+
     config = ServerConfig(
         antenna_csv=str(data_dir / "123.csv"),
         localities_csv=str(data_dir / "Localidades_Portugal.csv"),
-        max_workers=5,  
-        queue_size=50,
-        test_mode=False  # Se True: desativa chamadas externas (Overpass + Switches)
+        max_workers=_env_int("FIRETEC_MAX_WORKERS", 5),
+        queue_size=_env_int("FIRETEC_QUEUE_SIZE", 50),
+        switch_ips=switch_ips,
+        switch_port=_env_int("FIRETEC_SWITCH_PORT", 8080)
+    )
+
+    logger.info(
+        "Configuração ativa | workers=%s | switches=%s:%s",
+        config.max_workers,
+        ",".join(config.switch_ips),
+        config.switch_port
     )
     
     # Criar processador

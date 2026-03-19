@@ -150,9 +150,6 @@ class ServerConfig:
     # Logging
     log_level: str = "INFO"
     log_file: str = "logs/firetec.log"
-    
-    # Test mode (skips network I/O for faster experiments)
-    test_mode: bool = False
 
 
 @dataclass

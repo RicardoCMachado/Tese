@@ -237,13 +237,9 @@ class AlertProcessor:
             
             # 3. Procurar estradas
             start = time.time()
-            if self.config.test_mode:
-                # Test mode: skip Overpass API call
-                alert.nearby_roads = []
-            else:
-                alert.nearby_roads = self.road_service.find_nearby_roads(
-                    alert.coordinates
-                )
+            alert.nearby_roads = self.road_service.find_nearby_roads(
+                alert.coordinates
+            )
             metrics.road_search_time = time.time() - start
             logger.info(
                 f"[{alert.alert_id}] Estradas encontradas: "
@@ -281,7 +277,7 @@ class AlertProcessor:
                 logger.info(f"[{alert.alert_id}] CAP XML gerado: {cap_file}")
             
             # 7. Transmitir para switches FireTec
-            if cap_file and not self.config.test_mode:
+            if cap_file:
                 start = time.time()
                 cap_data = self.cap_service.read_cap_data(cap_file)
                 

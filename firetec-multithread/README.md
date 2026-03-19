@@ -99,6 +99,96 @@ pip install -r requirements.txt
 python main.py
 ```
 
+### Execução em Máquina Virtual (VM)
+
+Para correr exatamente o mesmo código no PC do laboratório e numa VM, configura apenas variáveis de ambiente antes de executar:
+
+**Windows (PowerShell):**
+
+```powershell
+# Switches da rede do laboratório
+$env:FIRETEC_SWITCH_IPS="192.168.0.22,192.168.0.21"
+$env:FIRETEC_SWITCH_PORT="8080"
+
+# Ajuste opcional de performance
+$env:FIRETEC_MAX_WORKERS="5"
+$env:FIRETEC_QUEUE_SIZE="50"
+
+python main.py
+```
+
+**Linux (Bash):**
+
+```bash
+# Switches da rede do laboratório
+export FIRETEC_SWITCH_IPS="192.168.0.22,192.168.0.21"
+export FIRETEC_SWITCH_PORT="8080"
+
+# Ajuste opcional de performance
+export FIRETEC_MAX_WORKERS="5"
+export FIRETEC_QUEUE_SIZE="50"
+
+python main.py
+```
+
+Variáveis suportadas:
+- `FIRETEC_SWITCH_IPS` (lista separada por vírgulas)
+- `FIRETEC_SWITCH_PORT` (porta TCP)
+- `FIRETEC_MAX_WORKERS`
+- `FIRETEC_QUEUE_SIZE`
+
+Nota de rede para VM:
+- Usa adaptador em `Bridged` (não `NAT`) para a VM conseguir alcançar os switches físicos na LAN.
+
+### Preparar imagem VM no teu PC (sem hardware)
+
+Objetivo: criar uma imagem que no laboratório seja só importar e correr.
+
+1. Criar VM local (Ubuntu 24.04 LTS) e clonar este repositório.
+2. Instalar dependências base do Ubuntu (uma vez):
+
+```bash
+sudo apt update
+sudo apt install -y python3 python3-venv python3-pip git
+```
+
+3. Na raiz do projeto, criar ambiente virtual e instalar dependências:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+4. Criar `.env` a partir de `.env.example`:
+
+```bash
+cp .env.example .env
+```
+
+5. Testar arranque local (sempre pelo mesmo comando):
+
+```bash
+source .venv/bin/activate
+python main.py
+```
+
+6. Depois de validado, desligar a VM e exportar para `OVA/OVF`.
+7. No laboratório: importar imagem, abrir terminal na pasta do projeto e correr:
+
+```bash
+source .venv/bin/activate
+python main.py
+```
+
+Se fores testar com hardware no laboratório:
+- confirmar `FIRETEC_SWITCH_IPS` e `FIRETEC_SWITCH_PORT`
+- usar rede `Bridged`
+
+Comando de execução do projeto (em qualquer ambiente):
+- `python main.py`
+
 **Menu Interativo**:
 - Opção 1: Inserir coordenadas manualmente
 - Opção 2: Gerar coordenadas aleatórias
