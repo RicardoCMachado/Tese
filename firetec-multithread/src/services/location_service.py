@@ -182,7 +182,10 @@ class LocationService:
         
         if roads and len(roads) > 0:
             road_names = [road.ref for road in roads]
-            roads_text = ", ".join(road_names)
-            message += f", cuidado ao circular na estrada {roads_text}"
+            message += self._format_roads_warning(road_names)
         
         return message
+
+    def _format_roads_warning(self, road_names: list) -> str:
+        roads_text = ", ".join(road_names)
+        return f", cuidado ao circular na estrada {roads_text}"

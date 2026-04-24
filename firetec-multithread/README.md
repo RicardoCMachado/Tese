@@ -49,7 +49,7 @@ Desenvolver um sistema multithread de alerta de incêndios que utilize a rede de
 **Serviços:**
 - `AntennaService` - 714 estações FM **✅ Com validação de dados**
 - `LocationService` - 171,977 localidades **✅ Thread-safe (Nominatim por request)**
-- `RoadService` - Estradas próximas via Overpass API **✅ Thread-safe**
+- `RoadService` - Estradas próximas via CSV local gerado do GeoPackage da Geofabrik
 - `AudioService` - Mensagens de voz em português
 - `CAPService` - Geração de XML CAP **✅ PS/PI de estações reais**
 - `TransmissionService` - Envio para switches FireTec **✅ Socket sempre fechado**
@@ -63,7 +63,7 @@ Desenvolver um sistema multithread de alerta de incêndios que utilize a rede de
 
 **Sistema:**
 - Testes com switches FireTec reais **(prioridade máxima)**
-- Otimização de rate limiting da Overpass API
+- Atualização periódica do CSV local de estradas
 - Caching de resultados de geocoding
 - Testes de carga e stress
 
@@ -79,7 +79,7 @@ Desenvolver um sistema multithread de alerta de incêndios que utilize a rede de
 ## 🔧 Correções Críticas (26 Fev 2026)
 
 ### Problemas Corrigidos:
-1. ✅ **Thread Safety**: Nominatim e Overpass API agora thread-safe (criados por request)
+1. ✅ **Thread Safety**: Nominatim criado por request; estradas consultadas localmente sem API externa
 2. ✅ **Switch Compatibility**: PS/PI de estações reais em vez de hardcoded
 3. ✅ **Socket Management**: Sempre fechado corretamente
 4. ✅ **Data Validation**: CSV com validação de campos obrigatórios
@@ -192,10 +192,9 @@ Comando de execução do projeto (em qualquer ambiente):
 **Menu Interativo**:
 - Opção 1: Inserir coordenadas manualmente
 - Opção 2: Gerar coordenadas aleatórias
-- Opção 3: Local de alerta em Cacia
-- Opção 4: Múltiplos alertas (teste de carga)
-- Opção 5: Mostrar status
-- Opção 6: Estatísticas
+- Opção 3: Criar múltiplos alertas simultâneos
+- Opção 4: Ver estado dos alertas
+- Opção 5: Ver estatísticas do sistema
 
 ---
 
@@ -213,7 +212,7 @@ Comando de execução do projeto (em qualquer ambiente):
 
 ### Até 6 Abril 2026 (Desenvolvimento Técnico)
 - [ ] Testes com hardware FireTec real
-- [ ] Otimização de rate limiting (Overpass API)
+- [ ] Automatizar atualização do CSV local de estradas
 - [ ] Métricas de performance finais
 - [ ] Screenshots e vídeos de demonstração
 - [ ] Documentação técnica completa
@@ -239,13 +238,13 @@ Comando de execução do projeto (em qualquer ambiente):
 
 ---Geopy** - Geolocalização
 - **gTTS** - Text-to-Speech
-- **Overpass API** - OpenStreetMap
+- **GeoPackage/CSV local** - OpenStreetMap via Geofabrik
 - **CAP Parser** - Common Alerting Protocol
 - **Threading** - Processamento paralelo
 - **Pandas** - Processamento de dados
 - **Geopy** - Geolocalização
 - **gTTS** - Text-to-Speech
-- **Overpass API** - OpenStreetMap
+- **GeoPackage/CSV local** - OpenStreetMap via Geofabrik
 - **CAP Parser** - Common Alerting Protocol
 - **Threading** - Processamento paralelo
 

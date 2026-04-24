@@ -1,4 +1,4 @@
-"""
+﻿"""
 FireTec Multithread Server - Sistema Principal
 Dissertação de Mestrado - Ricardo Machado
 """
@@ -12,7 +12,7 @@ from typing import List
 
 try:
     from dotenv import load_dotenv
-except ImportError:  # pragma: no cover - fallback se dependency faltar
+except ImportError: 
     load_dotenv = None
 
 sys.path.insert(0, str(Path(__file__).parent / "src"))
@@ -73,6 +73,14 @@ def _env_list(name: str, default: List[str]) -> List[str]:
     return parsed or default
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    """Lê booleano de variável de ambiente com fallback seguro."""
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in ("1", "true", "yes", "sim", "on")
+
+
 def on_alert_complete(alert):
     """Callback quando alerta é processado com sucesso"""
     logger.info(f"✓ ALERTA COMPLETO: {alert.alert_id}")
@@ -127,18 +135,23 @@ def main():
     print("="*70)
     print()
     print()
-    
+
     # Verificar ficheiros de dados
     data_dir = Path(__file__).parent / "data"
     if not (data_dir / "123.csv").exists():
         print("⚠️  AVISO: Ficheiro '123.csv' não encontrado em /data/")
         print("   Copie os ficheiros CSV para a pasta 'data/'")
         print()
-    
+
     if not (data_dir / "Localidades_Portugal.csv").exists():
         print("⚠️  AVISO: Ficheiro 'Localidades_Portugal.csv' não encontrado")
         print()
-    
+
+    if not (data_dir / "roads_portugal.csv").exists():
+        print("⚠️  AVISO: Ficheiro 'roads_portugal.csv' não encontrado")
+        print("   Gere-o com: python scripts/build_roads_csv.py --input data/portugal.gpkg")
+        print()
+
     # Configuração (VM-friendly via variáveis de ambiente)
     default_switch_ips = ["192.168.0.22", "192.168.0.21"]
     switch_ips = _env_list("FIRETEC_SWITCH_IPS", default_switch_ips)
@@ -146,19 +159,31 @@ def main():
     config = ServerConfig(
         antenna_csv=str(data_dir / "123.csv"),
         localities_csv=str(data_dir / "Localidades_Portugal.csv"),
+        roads_csv=os.getenv(
+            "FIRETEC_ROADS_CSV",
+            str(data_dir / "roads_portugal.csv")
+        ),
+        road_overrides_csv=os.getenv(
+            "FIRETEC_ROAD_OVERRIDES_CSV",
+            str(data_dir / "road_overrides.csv")
+        ),
         max_workers=_env_int("FIRETEC_MAX_WORKERS", 5),
         queue_size=_env_int("FIRETEC_QUEUE_SIZE", 50),
+        hardware_enabled=_env_bool("FIRETEC_HARDWARE_ENABLED", False),
         switch_ips=switch_ips,
         switch_port=_env_int("FIRETEC_SWITCH_PORT", 8080)
     )
 
     logger.info(
-        "Configuração ativa | workers=%s | switches=%s:%s",
+        "Configuração ativa | workers=%s | hardware=%s | switches=%s:%s",
         config.max_workers,
+        "ON" if config.hardware_enabled else "OFF",
         ",".join(config.switch_ips),
         config.switch_port
     )
-    
+    if not config.hardware_enabled:
+        logger.info("Modo hardware OFF: transmissão para switches desativada")
+
     # Criar processador
     logger.info("Inicializando servidor...")
     processor = AlertProcessor(
@@ -166,31 +191,31 @@ def main():
         on_alert_complete=on_alert_complete,
         on_alert_failed=on_alert_failed
     )
-    
+
     # Iniciar workers
     processor.start()
-    
+
     try:
         # Menu interativo
         menu = MainMenu(processor)
         menu.run()
-    
+
     except KeyboardInterrupt:
         # Já tratado pelo signal_handler, mas mantém para compatibilidade
         pass
-    
+
     except Exception as e:
         logger.error(f"Erro fatal: {e}", exc_info=True)
         print(f"\n❌ ERRO FATAL: {e}")
-    
+
     finally:
         # Parar processador
         if not shutdown_requested:
             print("\n🛑 Encerrando servidor...")
-        
+
         logger.info("Parando processador de alertas...")
         processor.stop()
-        
+
         # Estatísticas finais
         stats = processor.get_statistics()
         print("\n" + "="*60)
@@ -198,10 +223,10 @@ def main():
         print("="*60)
         print(f"Alertas processados: {stats['processed_total']}")
         print(f"Alertas falhados: {stats['failed_total']}")
-        print(f"Taxa de sucesso: {stats['processed_total']/(stats['processed_total']+stats['failed_total'])*100:.1f}%" 
+        print(f"Taxa de sucesso: {stats['processed_total']/(stats['processed_total']+stats['failed_total'])*100:.1f}%"
               if (stats['processed_total']+stats['failed_total']) > 0 else "N/A")
         print("="*60)
-        
+
         logger.info("Servidor encerrado")
         print("\n👋 Até breve!")
 

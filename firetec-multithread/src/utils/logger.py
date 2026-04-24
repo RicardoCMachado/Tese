@@ -63,7 +63,6 @@ def setup_logging(log_level: str = "INFO", log_file: str = None):
     
     # Silenciar logs verbosos de bibliotecas externas
     logging.getLogger('urllib3').setLevel(logging.WARNING)
-    logging.getLogger('overpy').setLevel(logging.WARNING)
     logging.getLogger('geopy').setLevel(logging.WARNING)
     
     root_logger.info(f"Logging configurado (nível: {log_level}, ficheiro: {log_file})")
