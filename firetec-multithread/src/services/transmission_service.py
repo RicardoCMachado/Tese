@@ -1,212 +1,85 @@
-"""
-Serviço para transmissão de alertas aos switches FireTec
-"""
+"""Transmissão TCP para FireTec switches (protocolo legado obrigatório)."""
+import logging
 import socket
 import time
-from typing import List, Optional
-from ..models.alert import FireAlert, ServerConfig
-import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Dict
+
+from ..models.alert import FireAlert
+from ..models.config import ServerConfig
 
 logger = logging.getLogger(__name__)
 
 
 class TransmissionService:
-    """Serviço para transmitir alertas aos switches FireTec"""
-    
     def __init__(self, config: ServerConfig):
-        """
-        Args:
-            config: Configuração do servidor
-        """
         self.config = config
         self.switch_ips = config.switch_ips
         self.switch_port = config.switch_port
-        self.connection_timeout = 5  # segundos
+        self.connection_timeout = 5
         self.retry_attempts = 3
-        self.retry_delay = 0.5  # segundos
-    
-    def transmit_to_switches(
-        self, 
-        alert: FireAlert,
-        cap_data: bytes
-    ) -> dict:
-        """
-        Transmite alerta para todos os switches configurados
-        
-        Args:
-            alert: Alerta de incêndio
-            cap_data: Dados CAP XML em bytes
-        
-        Returns:
-            Dicionário com resultados da transmissão para cada switch
-        """
-        logger.info(
-            f"[{alert.alert_id}] Transmitindo para {len(self.switch_ips)} switches"
-        )
-        
-        results = {}
-        
-        for switch_ip in self.switch_ips:
-            result = self._transmit_to_single_switch(
-                alert.alert_id,
-                switch_ip,
-                cap_data
-            )
-            results[switch_ip] = result
-        
-        # Resumo
-        success_count = sum(1 for r in results.values() if r['success'])
-        logger.info(
-            f"[{alert.alert_id}] Transmissão: {success_count}/{len(self.switch_ips)} "
-            f"switches OK"
-        )
-        
+
+    def build_legacy_payload(self, alert: FireAlert, wav_data: bytes) -> bytes:
+        station = alert.get_primary_station()
+        ps = station.ps if station else "FIRETEC1"
+        pi = station.pi if station else "8400"
+
+        frequencies = alert.get_frequencies()
+        if not frequencies:
+            frequencies = [100.0, 102.0]
+
+        af = ",".join(str(freq) for freq in frequencies)
+        return wav_data + f"PS={ps};PI={pi};AF={af};".encode("utf-8")
+
+    def transmit_legacy_to_switches(self, alert: FireAlert, payload: bytes) -> Dict[str, Dict]:
+        """Envio paralelo para os switches; falhas parciais não quebram aplicação."""
+        if self.config.simulation_mode:
+            return {ip: {"success": True, "attempts": 0, "duration": 0.0, "error": None} for ip in self.switch_ips}
+
+        results: Dict[str, Dict] = {}
+        with ThreadPoolExecutor(max_workers=len(self.switch_ips)) as executor:
+            future_by_ip = {
+                executor.submit(self._transmit_to_single_switch, alert.alert_id, ip, payload): ip
+                for ip in self.switch_ips
+            }
+            for future in as_completed(future_by_ip):
+                ip = future_by_ip[future]
+                try:
+                    results[ip] = future.result()
+                except Exception as exc:  # pragma: no cover - segurança extra
+                    results[ip] = {
+                        "success": False,
+                        "attempts": self.retry_attempts,
+                        "duration": 0.0,
+                        "error": str(exc),
+                    }
         return results
-    
-    def _transmit_to_single_switch(
-        self,
-        alert_id: str,
-        switch_ip: str,
-        data: bytes
-    ) -> dict:
-        """
-        Transmite para um único switch com retry
-        
-        Args:
-            alert_id: ID do alerta
-            switch_ip: IP do switch
-            data: Dados a transmitir
-        
-        Returns:
-            Dicionário com resultado da transmissão
-        """
-        result = {
-            'success': False,
-            'attempts': 0,
-            'error': None,
-            'duration': 0
-        }
-        
-        start_time = time.time()
-        
+
+    def _transmit_to_single_switch(self, alert_id: str, switch_ip: str, payload: bytes) -> Dict:
+        result = {"success": False, "attempts": 0, "error": None, "duration": 0.0}
+        start = time.time()
+
         for attempt in range(1, self.retry_attempts + 1):
-            result['attempts'] = attempt
-            
+            result["attempts"] = attempt
+            sock = None
             try:
-                logger.debug(
-                    f"[{alert_id}] Tentativa {attempt}/{self.retry_attempts} "
-                    f"para {switch_ip}"
-                )
-                
-                # Criar socket
                 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 sock.settimeout(self.connection_timeout)
-                
-                # Conectar
                 sock.connect((switch_ip, self.switch_port))
-                logger.debug(f"[{alert_id}] Conectado a {switch_ip}:{self.switch_port}")
-                
-                # Enviar dados
-                sock.sendall(data)
-                logger.debug(
-                    f"[{alert_id}] {len(data)} bytes enviados para {switch_ip}"
-                )
-                
-                # Fechar conexão
-                sock.close()
-                
-                # Sucesso!
-                result['success'] = True
-                result['duration'] = time.time() - start_time
-                
-                logger.info(
-                    f"[{alert_id}] ✓ Switch {switch_ip} OK "
-                    f"({result['duration']:.2f}s)"
-                )
-                
-                break  # Sair do loop de retry
-            
-            except socket.timeout:
-                error_msg = f"Timeout ao conectar a {switch_ip}"
-                logger.warning(f"[{alert_id}] {error_msg}")
-                result['error'] = error_msg
-            
-            except socket.error as e:
-                error_msg = f"Erro de socket: {e}"
-                logger.warning(f"[{alert_id}] {error_msg}")
-                result['error'] = error_msg
-            
-            except Exception as e:
-                error_msg = f"Erro inesperado: {e}"
-                logger.error(
-                    f"[{alert_id}] {error_msg}",
-                    exc_info=True
-                )
-                result['error'] = error_msg
-            
+                sock.sendall(payload)
+                result["success"] = True
+                logger.info("[%s] Switch %s OK na tentativa %s", alert_id, switch_ip, attempt)
+                break
+            except Exception as exc:
+                result["error"] = str(exc)
+                logger.warning("[%s] Switch %s falhou tentativa %s: %s", alert_id, switch_ip, attempt, exc)
+                time.sleep(0.5)
             finally:
-                # CRITICAL FIX: Garantir que socket é sempre fechado
-                try:
-                    sock.close()
-                except (NameError, AttributeError):
-                    # Socket pode não ter sido criado se falhou antes de socket.socket()
-                    pass
-                except Exception as e:
-                    logger.debug(f"Erro ao fechar socket: {e}")
-            
-            # Aguardar antes de retry (exceto na última tentativa)
-            if attempt < self.retry_attempts:
-                time.sleep(self.retry_delay)
-        
-        # Se falhou após todas as tentativas
-        if not result['success']:
-            logger.error(
-                f"[{alert_id}] ✗ Switch {switch_ip} FALHOU "
-                f"após {result['attempts']} tentativas"
-            )
-        
-        result['duration'] = time.time() - start_time
+                if sock is not None:
+                    try:
+                        sock.close()
+                    except Exception:
+                        pass
+
+        result["duration"] = time.time() - start
         return result
-    
-    def test_switch_connection(self, switch_ip: str) -> bool:
-        """
-        Testa conexão com um switch
-        
-        Args:
-            switch_ip: IP do switch
-        
-        Returns:
-            True se conseguiu conectar, False caso contrário
-        """
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(2)
-            sock.connect((switch_ip, self.switch_port))
-            sock.close()
-            
-            logger.info(f"✓ Switch {switch_ip} acessível")
-            return True
-        
-        except Exception as e:
-            logger.warning(f"✗ Switch {switch_ip} não acessível: {e}")
-            return False
-    
-    def test_all_switches(self) -> dict:
-        """
-        Testa conexão com todos os switches
-        
-        Returns:
-            Dicionário com status de cada switch
-        """
-        logger.info("Testando conexão com switches...")
-        
-        results = {}
-        for switch_ip in self.switch_ips:
-            results[switch_ip] = self.test_switch_connection(switch_ip)
-        
-        available = sum(1 for status in results.values() if status)
-        logger.info(
-            f"Switches disponíveis: {available}/{len(self.switch_ips)}"
-        )
-        
-        return results

@@ -1,188 +1,119 @@
-"""
-Serviço para determinação de localidades
-"""
-import pandas as pd
-import math
-from typing import Optional
-from geopy.geocoders import Nominatim
-from ..models.alert import Coordinates, Location, ServerConfig
+"""Serviço de geolocalização com fallback local."""
 import logging
+import math
+from typing import List, Optional
+
+import pandas as pd
+from geopy.geocoders import Nominatim
+
+from ..models.alert import Coordinates, Location, Road
+from ..models.config import ServerConfig
 
 logger = logging.getLogger(__name__)
 
 
 class LocationService:
-    """Serviço para determinar localidade de um alerta"""
-    
     def __init__(self, config: ServerConfig):
         self.config = config
-        self.localities_data = []
+        self.user_agent = "FireTec_Server"
+        self.localities_data: List[dict] = []
         self._load_localities()
-        # THREAD SAFETY: Não criar geocoder aqui - será criado por thread
-        self.user_agent = 'FireTec_Server'
-    
-    def _load_localities(self):
-        """Carrega base de dados de localidades"""
-        try:
-            data = pd.read_csv(self.config.localities_csv)
-            
-            self.localities_data = []
-            for _, row in data.iterrows():
-                self.localities_data.append({
-                    'longitude': float(row['Longitude']),
-                    'latitude': float(row['Latitude']),
-                    'freguesia': str(row['Freguesia']),
-                    'concelho': str(row['Concelho']),
-                    'distrito': str(row['Distrito'])
-                })
-            
-            logger.info(f"Carregadas {len(self.localities_data)} localidades")
-        
-        except Exception as e:
-            logger.error(f"Erro ao carregar localidades: {e}")
-            raise
-    
+
+    def _load_localities(self) -> None:
+        data = pd.read_csv(self.config.localities_csv)
+        self.localities_data = [
+            {
+                "longitude": float(row["Longitude"]),
+                "latitude": float(row["Latitude"]),
+                "freguesia": str(row["Freguesia"]),
+                "concelho": str(row["Concelho"]),
+                "distrito": str(row["Distrito"]),
+            }
+            for _, row in data.iterrows()
+        ]
+        logger.info("Carregadas %s localidades", len(self.localities_data))
+
     def find_location(self, coordinates: Coordinates) -> Location:
-        """
-        Determina localidade do alerta
-        
-        Tenta primeiro usar geocoding reverso (Nominatim),
-        se falhar usa a base de dados local por proximidade
-        
-        Args:
-            coordinates: Coordenadas do alerta
-        
-        Returns:
-            Informação da localidade
-        """
-        logger.info(f"Determinando localidade para {coordinates}")
-        
-        # Tentar geocoding reverso
-        try:
-            location = self._try_reverse_geocoding(coordinates)
-            if location:
-                logger.info(f"Localidade encontrada (geocoding): {location}")
-                return location
-        except Exception as e:
-            logger.warning(f"Geocoding falhou: {e}")
-        
-        # Fallback: usar base de dados local
-        location = self._find_nearest_locality(coordinates)
-        logger.info(f"Localidade encontrada (proximidade): {location}")
-        return location
-    
+        by_reverse = self._try_reverse_geocoding(coordinates)
+        if by_reverse:
+            return by_reverse
+        return self._nearest_locality(coordinates)
+
     def _try_reverse_geocoding(self, coordinates: Coordinates) -> Optional[Location]:
-        """
-        Tenta obter localidade via geocoding reverso (Nominatim)
-        THREAD SAFETY: Criar novo geocoder por requisição (Nominatim não é thread-safe)
-        """
         try:
-            # CRITICAL FIX: Criar geocoder por thread para evitar race conditions
             geocoder = Nominatim(user_agent=self.user_agent)
-            result = geocoder.reverse(
-                (coordinates.latitude, coordinates.longitude),
-                timeout=5  # Reduzido de 10s para 5s
-            )
-            
+            result = geocoder.reverse((coordinates.latitude, coordinates.longitude), timeout=5)
             if not result:
                 return None
-            
-            # Parsear endereço
-            address_parts = result.address.split(',')
-            
-            # Verificar se tem código postal
-            has_postal = any(char.isdigit() for char in address_parts[-2])
-            
-            if has_postal:
-                if len(address_parts) >= 5:
-                    freguesia = address_parts[-5].strip()
-                    concelho = address_parts[-4].strip()
-                    distrito = address_parts[-3].strip()
-                else:
-                    return None
+
+            parts = [item.strip() for item in result.address.split(",")]
+            if len(parts) < 4:
+                return None
+
+            # lógica semelhante à versão do Rodolfo, mas protegida
+            has_postal = len(parts) >= 2 and any(ch.isdigit() for ch in parts[-2])
+            if has_postal and len(parts) >= 5:
+                freguesia, concelho, distrito = parts[-5], parts[-4], parts[-3]
+            elif not has_postal and len(parts) >= 4:
+                freguesia, concelho, distrito = parts[-4], parts[-3], parts[-2]
             else:
-                if len(address_parts) >= 4:
-                    freguesia = address_parts[-4].strip()
-                    concelho = address_parts[-3].strip()
-                    distrito = address_parts[-2].strip()
-                else:
-                    return None
-            
+                return None
+
             return Location(
                 freguesia=freguesia,
                 concelho=concelho,
                 distrito=distrito,
-                coordinates=coordinates
+                coordinates=coordinates,
             )
-        
-        except Exception as e:
-            logger.debug(f"Erro no geocoding: {e}")
+        except Exception as exc:
+            logger.warning("Reverse geocoding falhou: %s", exc)
             return None
-    
-    def _find_nearest_locality(self, coordinates: Coordinates) -> Location:
-        """
-        Encontra localidade mais próxima na base de dados local
-        """
-        min_distance = float('inf')
-        nearest = None
-        
+
+    def _nearest_locality(self, coordinates: Coordinates) -> Location:
         lat_rad = math.radians(coordinates.latitude)
         lon_rad = math.radians(coordinates.longitude)
-        
+
+        nearest = None
+        min_distance = float("inf")
         for locality in self.localities_data:
-            lat_loc_rad = math.radians(locality['latitude'])
-            lon_loc_rad = math.radians(locality['longitude'])
-            
-            # Fórmula de Haversine
-            distance = 6372795.477 * math.acos(
-                math.sin(lat_rad) * math.sin(lat_loc_rad) +
-                math.cos(lat_rad) * math.cos(lat_loc_rad) *
-                math.cos(lon_rad - lon_loc_rad)
+            lat_loc = math.radians(locality["latitude"])
+            lon_loc = math.radians(locality["longitude"])
+            cosine_arg = (
+                math.sin(lat_rad) * math.sin(lat_loc)
+                + math.cos(lat_rad) * math.cos(lat_loc) * math.cos(lon_rad - lon_loc)
             )
-            
+            cosine_arg = max(min(cosine_arg, 1.0), -1.0)
+            distance = 6372795.477 * math.acos(cosine_arg)
+
             if distance < min_distance:
                 min_distance = distance
                 nearest = locality
-        
+
         if nearest is None:
-            raise ValueError("Nenhuma localidade encontrada")
-        
-        logger.debug(f"Localidade mais próxima a {min_distance:.0f}m")
-        
-        return Location(
-            freguesia=nearest['freguesia'],
-            concelho=nearest['concelho'],
-            distrito=nearest['distrito'],
-            coordinates=Coordinates(
-                latitude=nearest['latitude'],
-                longitude=nearest['longitude']
+            return Location(
+                freguesia="Desconhecida",
+                concelho="Desconhecido",
+                distrito="Desconhecido",
+                coordinates=coordinates,
             )
+
+        return Location(
+            freguesia=nearest["freguesia"],
+            concelho=nearest["concelho"],
+            distrito=nearest["distrito"],
+            coordinates=coordinates,
         )
-    
-    def generate_alert_message(
-        self,
-        location: Location,
-        roads: list = None
-    ) -> str:
-        """
-        Gera mensagem de alerta textual
-        
-        Args:
-            location: Localidade do alerta
-            roads: Lista de estradas próximas (opcional)
-        
-        Returns:
-            Mensagem de alerta formatada
-        """
-        message = (
+
+    @staticmethod
+    def generate_alert_message(location: Location, roads: Optional[List[Road]] = None) -> str:
+        base = (
             f"Alerta de Incêndio na Freguesia de {location.freguesia}, "
             f"no Concelho de {location.concelho}, "
             f"no Distrito de {location.distrito}"
         )
-        
-        if roads and len(roads) > 0:
-            road_names = [road.ref for road in roads]
-            roads_text = ", ".join(road_names)
-            message += f", cuidado ao circular na estrada {roads_text}"
-        
-        return message
+
+        if roads:
+            roads_text = ", ".join(road.ref for road in roads)
+            return f"{base}, cuidado ao circular na estrada {roads_text}"
+
+        return f"{base}. Evite circular na zona afetada."

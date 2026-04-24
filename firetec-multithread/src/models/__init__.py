@@ -1,26 +1,23 @@
-"""
-Modelos de dados do sistema FireTec
-"""
 from .alert import (
-    FireAlert,
-    AlertStatus,
     AlertPriority,
+    AlertStatus,
     Coordinates,
-    RadioStation,
+    FireAlert,
     Location,
+    ProcessingMetrics,
+    RadioStation,
     Road,
-    ServerConfig,
-    ProcessingMetrics
 )
+from .config import ServerConfig
 
 __all__ = [
-    'FireAlert',
-    'AlertStatus',
-    'AlertPriority',
-    'Coordinates',
-    'RadioStation',
-    'Location',
-    'Road',
-    'ServerConfig',
-    'ProcessingMetrics'
+    "AlertPriority",
+    "AlertStatus",
+    "Coordinates",
+    "FireAlert",
+    "Location",
+    "ProcessingMetrics",
+    "RadioStation",
+    "Road",
+    "ServerConfig",
 ]

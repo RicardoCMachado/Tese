@@ -1,24 +1,19 @@
-"""
-Modelos de dados para o sistema FireTec
-"""
+"""Modelos de domínio dos alertas FireTec."""
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
 from datetime import datetime
 from enum import Enum
+from typing import Dict, List, Optional, Tuple
 
 
 class AlertStatus(Enum):
-    """Estados possíveis de um alerta"""
     PENDING = "pending"
     PROCESSING = "processing"
     PROCESSED = "processed"
     SENT = "sent"
     FAILED = "failed"
-    CANCELLED = "cancelled"
 
 
 class AlertPriority(Enum):
-    """Prioridade do alerta"""
     LOW = 1
     NORMAL = 2
     HIGH = 3
@@ -27,147 +22,86 @@ class AlertPriority(Enum):
 
 @dataclass
 class Coordinates:
-    """Coordenadas geográficas"""
     latitude: float
     longitude: float
-    
+
     def __str__(self) -> str:
-        return f"({self.latitude}, {self.longitude})"
-    
+        return f"({self.latitude:.6f}, {self.longitude:.6f})"
+
     def to_tuple(self) -> Tuple[float, float]:
-        return (self.latitude, self.longitude)
+        return self.latitude, self.longitude
 
 
 @dataclass
 class RadioStation:
-    """Estação de rádio FM"""
-    ps: str  # Program Service
-    pi: str  # Program Identification
-    frequency: float  # MHz
+    ps: str
+    pi: str
+    frequency: float
     latitude: float
     longitude: float
-    coverage_radius: float  # km
-    concelho: str
-    distrito: str
-    
-    def __hash__(self):
-        return hash((self.ps, self.pi, self.frequency))
-    
-    def __eq__(self, other):
-        if not isinstance(other, RadioStation):
-            return False
-        return (self.ps == other.ps and 
-                self.pi == other.pi and 
-                self.frequency == other.frequency)
+    coverage_radius: float
+    concelho: str = ""
+    distrito: str = ""
 
 
 @dataclass
 class Location:
-    """Informação de localidade"""
     freguesia: str
     concelho: str
     distrito: str
     coordinates: Coordinates
-    
+
     def __str__(self) -> str:
         return f"{self.freguesia}, {self.concelho}, {self.distrito}"
 
 
 @dataclass
 class Road:
-    """Estrada próxima do alerta"""
-    ref: str  # Referência da estrada (ex: "A1", "N1")
-    highway_type: str  # motorway, trunk, primary, etc.
-    
-    def __str__(self) -> str:
-        return self.ref
+    ref: str
+    highway_type: str
+
+
+@dataclass
+class ProcessingMetrics:
+    alert_id: str
+    start_time: datetime = field(default_factory=datetime.now)
+    end_time: Optional[datetime] = None
+    duration: Optional[float] = None
+
+    antenna_search_time: float = 0.0
+    location_search_time: float = 0.0
+    road_search_time: float = 0.0
+    audio_generation_time: float = 0.0
+    transmission_time: float = 0.0
+    switch_success_rate: float = 0.0
+
+    def mark_complete(self) -> None:
+        self.end_time = datetime.now()
+        self.duration = (self.end_time - self.start_time).total_seconds()
 
 
 @dataclass
 class FireAlert:
-    """Alerta de incêndio"""
     alert_id: str
     coordinates: Coordinates
     timestamp: datetime = field(default_factory=datetime.now)
     priority: AlertPriority = AlertPriority.NORMAL
     status: AlertStatus = AlertStatus.PENDING
-    
-    # Dados processados
+
     location: Optional[Location] = None
     nearby_stations: List[RadioStation] = field(default_factory=list)
     nearby_roads: List[Road] = field(default_factory=list)
     message_text: Optional[str] = None
     audio_file: Optional[str] = None
-    kml_file: Optional[str] = None
-    
-    # Metadados
-    processing_time: Optional[float] = None  # segundos
+    cap_file: Optional[str] = None
+
+    processing_time: Optional[float] = None
     error_message: Optional[str] = None
-    
-    def __str__(self) -> str:
-        return (f"Alert {self.alert_id}: {self.coordinates} "
-                f"[{self.status.value}] - {self.timestamp.strftime('%H:%M:%S')}")
-    
+    metrics: Optional[ProcessingMetrics] = None
+    transmission_results: Dict[str, Dict] = field(default_factory=dict)
+
     def get_frequencies(self) -> List[float]:
-        """Retorna lista de frequências das estações próximas"""
-        return list(set([station.frequency for station in self.nearby_stations]))
-    
-    def get_ps_list(self) -> List[str]:
-        """Retorna lista de PS das estações próximas"""
-        return list(set([station.ps for station in self.nearby_stations]))
+        return sorted({station.frequency for station in self.nearby_stations})
 
-
-@dataclass
-class ServerConfig:
-    """Configuração do servidor"""
-    # Dados
-    antenna_csv: str = "123.csv"
-    localities_csv: str = "Localidades_Portugal.csv"
-    
-    # Antenas
-    initial_search_radius: float = 7.0  # km
-    radius_increment: float = 2.0  # km
-    min_antennas: int = 5
-    
-    # Estradas
-    initial_road_radius: int = 2000  # metros
-    road_radius_increment: int = 500  # metros
-    min_roads: int = 1
-    
-    # Áudio
-    audio_language: str = "pt"
-    audio_sample_rate: int = 32000
-    audio_bit_depth: int = 1
-    
-    # FireTec Switches
-    switch_ips: List[str] = field(default_factory=lambda: ["192.168.0.22", "192.168.0.21"])
-    switch_port: int = 8080
-    
-    # Threading
-    max_workers: int = 10
-    queue_size: int = 100
-    
-    # Logging
-    log_level: str = "INFO"
-    log_file: str = "logs/firetec.log"
-
-
-@dataclass
-class ProcessingMetrics:
-    """Métricas de processamento"""
-    alert_id: str
-    start_time: datetime
-    end_time: Optional[datetime] = None
-    duration: Optional[float] = None
-    
-    # Tempos parciais
-    antenna_search_time: Optional[float] = None
-    location_search_time: Optional[float] = None
-    road_search_time: Optional[float] = None
-    audio_generation_time: Optional[float] = None
-    transmission_time: Optional[float] = None
-    
-    def mark_complete(self):
-        """Marca processamento como completo e calcula duração"""
-        self.end_time = datetime.now()
-        self.duration = (self.end_time - self.start_time).total_seconds()
+    def get_primary_station(self) -> Optional[RadioStation]:
+        return self.nearby_stations[0] if self.nearby_stations else None
