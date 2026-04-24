@@ -76,16 +76,24 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 python -m venv .venv
 .venv\Scripts\activate.bat
 python -m pip install --upgrade pip
-pip install -r requirements.txt
-python main.py
 ```
 
-### Linux/macOS (bash/zsh)
+## Configuração (.env)
+
+```env
+FIRETEC_SWITCH_IPS=192.168.0.22,192.168.0.21
+FIRETEC_SWITCH_PORT=8080
+FIRETEC_MAX_WORKERS=5
+FIRETEC_ENABLE_OVERPASS=true
+FIRETEC_ENABLE_CAP=true
+FIRETEC_SIMULATION=false
+```
+
+## Execução
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install --upgrade pip
 pip install -r requirements.txt
 python main.py
 ```
