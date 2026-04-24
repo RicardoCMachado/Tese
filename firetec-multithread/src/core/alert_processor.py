@@ -1,364 +1,166 @@
-"""
-Processador de alertas multithread - NÚCLEO DO SISTEMA
-"""
-import threading
+"""Núcleo de processamento de alertas multithread."""
+import logging
 import queue
+import threading
 import time
 import uuid
 from datetime import datetime
-from typing import Optional, Callable, Dict
-import logging
+from typing import Callable, Dict, Optional
 
-from ..models.alert import (
-    FireAlert, AlertStatus, AlertPriority, 
-    Coordinates, ProcessingMetrics, ServerConfig
+from ..models import AlertPriority, AlertStatus, Coordinates, FireAlert, ProcessingMetrics, ServerConfig
+from ..services import (
+    AntennaService,
+    AudioService,
+    CAPService,
+    KMLService,
+    LocationService,
+    RoadService,
+    TransmissionService,
 )
-from ..services.antenna_service import AntennaService
-from ..services.location_service import LocationService
-from ..services.road_service import RoadService
-from ..services.audio_service import AudioService
-from ..services.cap_service import CAPService
-from ..services.transmission_service import TransmissionService
+from .worker_pool import WorkerPool
 
 logger = logging.getLogger(__name__)
 
 
 class AlertProcessor:
-    """
-    Processador multithread de alertas de incêndio
-    
-    Funcionalidades:
-    - Fila de prioridades para alertas
-    - Processamento paralelo de múltiplos alertas
-    - Gestão de workers threads
-    - Callbacks para notificações
-    """
-    
     def __init__(
-        self, 
+        self,
         config: ServerConfig,
         on_alert_complete: Optional[Callable[[FireAlert], None]] = None,
-        on_alert_failed: Optional[Callable[[FireAlert], None]] = None
+        on_alert_failed: Optional[Callable[[FireAlert], None]] = None,
     ):
-        """
-        Args:
-            config: Configuração do servidor
-            on_alert_complete: Callback quando alerta é processado com sucesso
-            on_alert_failed: Callback quando alerta falha
-        """
         self.config = config
         self.on_alert_complete = on_alert_complete
         self.on_alert_failed = on_alert_failed
-        
-        # Fila de alertas (priority queue)
-        self.alert_queue: queue.PriorityQueue = queue.PriorityQueue(
-            maxsize=config.queue_size
+
+        self.pool = WorkerPool(
+            max_workers=config.max_workers,
+            queue_size=config.queue_size,
+            worker_fn=self._process_alert,
         )
-        
-        # Workers threads
-        self.workers: list = []
-        self.max_workers = config.max_workers
-        self.shutdown_flag = threading.Event()
-        
-        # Serviços
+
         self.antenna_service = AntennaService(config)
         self.location_service = LocationService(config)
         self.road_service = RoadService(config)
         self.audio_service = AudioService()
-        self.cap_service = CAPService()
         self.transmission_service = TransmissionService(config)
-        
-        # Rastreamento de alertas ativos
+        self.cap_service = CAPService()
+        self.kml_service = KMLService()
+
         self.active_alerts: Dict[str, FireAlert] = {}
         self.alerts_lock = threading.Lock()
-        
-        # Métricas
         self.processed_count = 0
         self.failed_count = 0
-        
-        logger.info(
-            f"AlertProcessor inicializado com {self.max_workers} workers"
-        )
-    
-    def start(self):
-        """Inicia workers threads"""
-        logger.info("Iniciando workers...")
-        
-        for i in range(self.max_workers):
-            worker = threading.Thread(
-                target=self._worker_loop,
-                name=f"Worker-{i+1}",
-                daemon=True
-            )
-            worker.start()
-            self.workers.append(worker)
-        
-        logger.info(f"{len(self.workers)} workers iniciados")
-    
-    def stop(self):
-        """Para todos os workers"""
-        logger.info("Parando workers...")
-        self.shutdown_flag.set()
-        
-        # Aguardar todos os workers terminarem
-        for worker in self.workers:
-            worker.join(timeout=5)
-        
-        logger.info("Todos os workers parados")
-    
-    def submit_alert(
-        self, 
-        coordinates: Coordinates,
-        priority: AlertPriority = AlertPriority.NORMAL
-    ) -> str:
-        """
-        Submete novo alerta para processamento
-        
-        Args:
-            coordinates: Coordenadas do incêndio
-            priority: Prioridade do alerta
-        
-        Returns:
-            ID do alerta criado
-        
-        Raises:
-            queue.Full: Se a fila estiver cheia
-        """
-        # Gerar ID único
+
+    def start(self) -> None:
+        self.pool.start()
+
+    def stop(self) -> None:
+        self.pool.stop()
+
+    def submit_alert(self, coordinates: Coordinates, priority: AlertPriority = AlertPriority.NORMAL) -> str:
         alert_id = f"ALERT-{datetime.now().strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:6]}"
-        
-        # Criar alerta
-        alert = FireAlert(
-            alert_id=alert_id,
-            coordinates=coordinates,
-            priority=priority,
-            status=AlertStatus.PENDING
-        )
-        
-        # Adicionar à fila (priority queue usa tupla: (prioridade, contador, item))
-        # Prioridade invertida: menor valor = maior prioridade
-        priority_value = -priority.value  # Inverter para high ter prioridade
-        
+        alert = FireAlert(alert_id=alert_id, coordinates=coordinates, priority=priority)
+
+        with self.alerts_lock:
+            self.active_alerts[alert_id] = alert
+
         try:
-            self.alert_queue.put_nowait((priority_value, time.time(), alert))
-            
-            with self.alerts_lock:
-                self.active_alerts[alert_id] = alert
-            
-            logger.info(
-                f"Alerta {alert_id} submetido (prioridade: {priority.name})"
-            )
-            
-            return alert_id
-        
+            # menor valor = maior prioridade
+            self.pool.submit(priority=-priority.value, payload=alert)
         except queue.Full:
-            logger.error(f"Fila cheia! Não foi possível adicionar alerta")
+            with self.alerts_lock:
+                self.active_alerts.pop(alert_id, None)
             raise
-    
-    def get_alert_status(self, alert_id: str) -> Optional[FireAlert]:
-        """Obtém status de um alerta específico"""
-        with self.alerts_lock:
-            return self.active_alerts.get(alert_id)
-    
-    def get_queue_size(self) -> int:
-        """Retorna tamanho atual da fila"""
-        return self.alert_queue.qsize()
-    
-    def get_active_count(self) -> int:
-        """Retorna número de alertas ativos"""
-        with self.alerts_lock:
-            return len(self.active_alerts)
-    
-    def _worker_loop(self):
-        """Loop principal de cada worker thread"""
-        worker_name = threading.current_thread().name
-        logger.info(f"{worker_name} iniciado")
-        
-        while not self.shutdown_flag.is_set():
-            try:
-                # Aguardar alerta da fila (timeout 1s)
-                _, _, alert = self.alert_queue.get(timeout=1)
-                
-                logger.info(f"{worker_name} processando {alert.alert_id}")
-                
-                # Processar alerta
-                self._process_alert(alert, worker_name)
-                
-                # Marcar tarefa como completa
-                self.alert_queue.task_done()
-            
-            except queue.Empty:
-                # Timeout - continuar loop
-                continue
-            
-            except Exception as e:
-                logger.error(
-                    f"{worker_name} erro inesperado: {e}",
-                    exc_info=True
-                )
-        
-        logger.info(f"{worker_name} terminado")
-    
-    def _process_alert(self, alert: FireAlert, worker_name: str):
-        """
-        Processa um alerta completo
-        
-        Args:
-            alert: Alerta a processar
-            worker_name: Nome da thread worker
-        """
-        metrics = ProcessingMetrics(
-            alert_id=alert.alert_id,
-            start_time=datetime.now()
-        )
-        
+        return alert_id
+
+    def _process_alert(self, alert: FireAlert) -> None:
+        metrics = ProcessingMetrics(alert_id=alert.alert_id)
+        alert.metrics = metrics
+
         try:
             alert.status = AlertStatus.PROCESSING
-            logger.info(f"[{alert.alert_id}] Iniciando processamento")
-            
-            # 1. Procurar antenas próximas
+
             start = time.time()
-            alert.nearby_stations = self.antenna_service.find_nearby_stations(
-                alert.coordinates
-            )
+            alert.nearby_stations = self.antenna_service.find_nearby_stations(alert.coordinates)
             metrics.antenna_search_time = time.time() - start
-            logger.info(
-                f"[{alert.alert_id}] Antenas encontradas: "
-                f"{len(alert.nearby_stations)}"
-            )
-            
-            # 2. Determinar localidade
+
             start = time.time()
-            alert.location = self.location_service.find_location(
-                alert.coordinates
-            )
+            alert.location = self.location_service.find_location(alert.coordinates)
             metrics.location_search_time = time.time() - start
-            logger.info(f"[{alert.alert_id}] Localidade: {alert.location}")
-            
-            # 3. Procurar estradas
+
             start = time.time()
-            alert.nearby_roads = self.road_service.find_nearby_roads(
-                alert.coordinates
-            )
+            alert.nearby_roads = self.road_service.find_nearby_roads(alert.coordinates)
             metrics.road_search_time = time.time() - start
-            logger.info(
-                f"[{alert.alert_id}] Estradas encontradas: "
-                f"{len(alert.nearby_roads)}"
-            )
-            
-            # 4. Gerar mensagem
+
             alert.message_text = self.location_service.generate_alert_message(
                 alert.location,
-                alert.nearby_roads
+                alert.nearby_roads,
             )
-            logger.info(f"[{alert.alert_id}] Mensagem: {alert.message_text}")
-            
-            # 5. Gerar áudio
+
             start = time.time()
-            audio_file = self.audio_service.generate_audio(
-                alert.message_text,
-                alert.alert_id
-            )
+            audio_file = self.audio_service.generate_audio(alert.message_text, alert.alert_id)
             metrics.audio_generation_time = time.time() - start
-            
-            if audio_file:
-                alert.audio_file = audio_file
-                logger.info(f"[{alert.alert_id}] Áudio gerado: {audio_file}")
-            else:
-                logger.warning(f"[{alert.alert_id}] Falha ao gerar áudio")
-            
-            # 6. Gerar CAP XML
-            audio_bytes = None
-            if audio_file:
-                audio_bytes = self.audio_service.read_audio_bytes(audio_file)
-            
-            cap_file = self.cap_service.generate_cap(alert, audio_bytes)
-            if cap_file:
-                logger.info(f"[{alert.alert_id}] CAP XML gerado: {cap_file}")
-            
-            # 7. Transmitir para switches FireTec
-            if cap_file:
-                start = time.time()
-                cap_data = self.cap_service.read_cap_data(cap_file)
-                
-                if cap_data:
-                    transmission_results = self.transmission_service.transmit_to_switches(
-                        alert,
-                        cap_data
-                    )
-                    metrics.transmission_time = time.time() - start
-                    
-                    # Verificar se transmissão foi bem sucedida
-                    success_count = sum(
-                        1 for r in transmission_results.values() if r['success']
-                    )
-                    
-                    if success_count > 0:
-                        alert.status = AlertStatus.SENT
-                        logger.info(
-                            f"[{alert.alert_id}] Transmitido para "
-                            f"{success_count} switch(es)"
-                        )
-                    else:
-                        logger.warning(
-                            f"[{alert.alert_id}] Falha na transmissão para "
-                            f"todos os switches"
-                        )
-            
-            # Se não foi transmitido, marcar como processado
-            if alert.status != AlertStatus.SENT:
-                alert.status = AlertStatus.PROCESSED
+            if not audio_file:
+                raise RuntimeError("Falha a gerar WAV de alerta")
+
+            alert.audio_file = audio_file
+            wav_data = self.audio_service.read_audio_bytes(audio_file)
+            if not wav_data:
+                raise RuntimeError("Falha a ler WAV gerado")
+
+            start = time.time()
+            payload = self.transmission_service.build_legacy_payload(alert, wav_data)
+            transmission = self.transmission_service.transmit_legacy_to_switches(alert, payload)
+            metrics.transmission_time = time.time() - start
+            alert.transmission_results = transmission
+
+            success_count = sum(1 for item in transmission.values() if item.get("success"))
+            metrics.switch_success_rate = success_count / max(len(self.config.switch_ips), 1)
+
+            if self.config.enable_cap:
+                alert.cap_file = self.cap_service.generate_cap(alert, wav_data)
+
             metrics.mark_complete()
             alert.processing_time = metrics.duration
-            
+            alert.status = AlertStatus.SENT if success_count > 0 else AlertStatus.PROCESSED
             self.processed_count += 1
-            
-            logger.info(
-                f"[{alert.alert_id}] Processado com sucesso "
-                f"em {metrics.duration:.2f}s"
-            )
-            
-            # Callback sucesso
+
             if self.on_alert_complete:
                 self.on_alert_complete(alert)
-        
-        except Exception as e:
+
+        except Exception as exc:
             alert.status = AlertStatus.FAILED
-            alert.error_message = str(e)
+            alert.error_message = str(exc)
             self.failed_count += 1
-            
-            logger.error(
-                f"[{alert.alert_id}] Falha no processamento: {e}",
-                exc_info=True
-            )
-            
-            # Callback falha
+            logger.error("[%s] Falha no processamento: %s", alert.alert_id, exc, exc_info=True)
             if self.on_alert_failed:
                 self.on_alert_failed(alert)
-        
+
         finally:
-            # Remover de alertas ativos após um tempo
-            # (manter histórico por alguns minutos)
-            threading.Timer(
-                300,  # 5 minutos
-                self._remove_from_active,
-                args=[alert.alert_id]
-            ).start()
-    
-    def _remove_from_active(self, alert_id: str):
-        """Remove alerta da lista de ativos"""
+            threading.Timer(300, self._remove_from_active, args=[alert.alert_id]).start()
+
+    def _remove_from_active(self, alert_id: str) -> None:
         with self.alerts_lock:
-            if alert_id in self.active_alerts:
-                del self.active_alerts[alert_id]
-                logger.debug(f"Alerta {alert_id} removido do histórico ativo")
-    
+            self.active_alerts.pop(alert_id, None)
+
+    def get_queue_size(self) -> int:
+        return self.pool.size()
+
+    def get_active_count(self) -> int:
+        with self.alerts_lock:
+            return len(self.active_alerts)
+
+    def get_alert_status(self, alert_id: str) -> Optional[FireAlert]:
+        with self.alerts_lock:
+            return self.active_alerts.get(alert_id)
+
     def get_statistics(self) -> dict:
-        """Retorna estatísticas do processador"""
         return {
-            'active_alerts': self.get_active_count(),
-            'queue_size': self.get_queue_size(),
-            'processed_total': self.processed_count,
-            'failed_total': self.failed_count,
-            'workers': len(self.workers),
-            'max_workers': self.max_workers
+            "active_alerts": self.get_active_count(),
+            "queue_size": self.get_queue_size(),
+            "processed_total": self.processed_count,
+            "failed_total": self.failed_count,
+            "workers": len(self.pool.workers),
+            "max_workers": self.pool.max_workers,
         }
