@@ -83,26 +83,48 @@ def _env_bool(name: str, default: bool) -> bool:
 
 def on_alert_complete(alert):
     """Callback quando alerta é processado com sucesso"""
+    queue_wait = alert.queue_wait_time or 0.0
+    processing_time = alert.processing_time or 0.0
+    total_time = queue_wait + processing_time
+
     logger.info(f"✓ ALERTA COMPLETO: {alert.alert_id}")
     logger.info(f"  Localização: {alert.location}")
     logger.info(f"  Antenas: {len(alert.nearby_stations)}")
     logger.info(f"  Estradas: {len(alert.nearby_roads)}")
-    logger.info(f"  Tempo: {alert.processing_time:.2f}s")
+    logger.info(f"  Espera em fila: {queue_wait:.2f}s")
+    logger.info(f"  Processamento: {processing_time:.2f}s")
+    logger.info(f"  Tempo total: {total_time:.2f}s")
     logger.info(f"  Mensagem: {alert.message_text}")
-    print("\n" + "="*60)
-    print(f"✓ ALERTA {alert.alert_id} PROCESSADO")
-    print(f"Localidade: {alert.location}")
-    print(f"Mensagem: {alert.message_text}")
-    print(f"Tempo de processamento: {alert.processing_time:.2f}s")
-    print("="*60 + "\n")
+    menu = MainMenu.get_active()
+    message = (
+        "\n" + "=" * 60 + "\n"
+        f"✓ ALERTA {alert.alert_id} PROCESSADO\n"
+        f"Localidade: {alert.location}\n"
+        f"Mensagem: {alert.message_text}\n"
+        f"Tempo em fila: {queue_wait:.2f}s\n"
+        f"Tempo de processamento: {processing_time:.2f}s\n"
+        f"Tempo total (fila + processamento): {total_time:.2f}s\n"
+        + "=" * 60 + "\n"
+    )
+    if menu is not None:
+        menu.emit_message(message)
+    else:
+        print(message)
 
 
 def on_alert_failed(alert):
     """Callback quando alerta falha"""
     logger.error(f"✗ ALERTA FALHOU: {alert.alert_id}")
     logger.error(f"  Erro: {alert.error_message}")
-    print(f"\n✗ ERRO: Alerta {alert.alert_id} falhou!")
-    print(f"Erro: {alert.error_message}\n")
+    menu = MainMenu.get_active()
+    message = (
+        f"\n✗ ERRO: Alerta {alert.alert_id} falhou!\n"
+        f"Erro: {alert.error_message}\n"
+    )
+    if menu is not None:
+        menu.emit_message(message)
+    else:
+        print(message)
 
 
 def signal_handler(sig, frame):
@@ -122,19 +144,6 @@ def main():
     """Função principal"""
     # Registrar handler para Ctrl+C
     signal.signal(signal.SIGINT, signal_handler)
-    print()
-    print("="*70)
-    print("  FIRETEC MULTITHREAD SERVER  ".center(70))
-    print("  Sistema de Alerta de Incêndios por Rádio FM  ".center(70))
-    print("="*70)
-    print()
-    print("Dissertação de Mestrado - 2025/2026")
-    print("Aluno: Ricardo Machado")
-    print("Orientador: Prof. António Navarro")
-    print()
-    print("="*70)
-    print()
-    print()
 
     # Verificar ficheiros de dados
     data_dir = Path(__file__).parent / "data"

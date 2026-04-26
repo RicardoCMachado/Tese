@@ -101,6 +101,7 @@ class FireAlert:
     kml_file: Optional[str] = None
 
     # Metadados
+    queue_wait_time: Optional[float] = None  # segundos na fila antes de processar
     processing_time: Optional[float] = None  # segundos
     error_message: Optional[str] = None
 

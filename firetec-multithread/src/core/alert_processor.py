@@ -58,6 +58,8 @@ class AlertProcessor:
         self.workers: list = []
         self.max_workers = config.max_workers
         self.shutdown_flag = threading.Event()
+        self.busy_workers = 0
+        self.busy_workers_lock = threading.Lock()
 
         # Serviços
         self.antenna_service = AntennaService(config)
@@ -180,7 +182,9 @@ class AlertProcessor:
                 logger.info(f"{worker_name} processando {alert.alert_id}")
 
                 # Processar alerta
+                self._set_worker_busy(True)
                 self._process_alert(alert, worker_name)
+                self._set_worker_busy(False)
 
                 # Marcar tarefa como completa
                 self.alert_queue.task_done()
@@ -190,6 +194,7 @@ class AlertProcessor:
                 continue
 
             except Exception as e:
+                self._set_worker_busy(False)
                 logger.error(
                     f"{worker_name} erro inesperado: {e}",
                     exc_info=True
@@ -211,8 +216,16 @@ class AlertProcessor:
         )
 
         try:
+            alert.queue_wait_time = max(
+                0.0,
+                (datetime.now() - alert.timestamp).total_seconds()
+            )
             alert.status = AlertStatus.PROCESSING
             logger.info(f"[{alert.alert_id}] Iniciando processamento")
+            logger.info(
+                f"[{alert.alert_id}] Tempo de espera na fila: "
+                f"{alert.queue_wait_time:.2f}s"
+            )
 
             # 1. Procurar antenas próximas
             start = time.time()
@@ -354,6 +367,16 @@ class AlertProcessor:
             'queue_size': self.get_queue_size(),
             'processed_total': self.processed_count,
             'failed_total': self.failed_count,
+            'busy_workers': self.busy_workers,
+            'available_workers': max(0, self.max_workers - self.busy_workers),
             'workers': len(self.workers),
             'max_workers': self.max_workers
         }
+
+    def _set_worker_busy(self, busy: bool):
+        """Atualiza contador de workers ocupados de forma thread-safe."""
+        with self.busy_workers_lock:
+            if busy:
+                self.busy_workers += 1
+            else:
+                self.busy_workers = max(0, self.busy_workers - 1)

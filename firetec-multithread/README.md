@@ -10,12 +10,12 @@
 
 | Fase | Período | Estado |
 |------|---------|--------|
-| **Desenvolvimento Técnico Final** | 26 Fev - 6 Abr 2026 | 🔄 Em curso (39 dias) |
-| **Torneios (pausa técnica)** | 7 Abr - 21 Abr 2026 | ⏸️ Só escrita (15 dias) |
-| **Escrita da Dissertação** | 22 Abr - 5 Jun 2026 | ⏳ Pendente (45 dias) |
+| **Desenvolvimento Técnico Final** | 26 Fev - 6 Abr 2026 | ✅ Concluído |
+| **Torneios (pausa técnica)** | 7 Abr - 21 Abr 2026 | ✅ Concluído |
+| **Escrita da Dissertação** | 22 Abr - 5 Jun 2026 | 🔄 Em curso (10%) |
 | **Entrega Final** | **6 Junho 2026** | 🎯 Deadline |
 
-> **Nota:** Durante os torneios (7-21 Abr), apenas trabalho de escrita será realizado.
+> **Estado a 26 Abril 2026:** sistema funcional para testes locais e com preparação para hardware; foco principal atual na redação da dissertação até à entrega de 6 Junho 2026.
 
 ---
 
@@ -37,7 +37,7 @@ Desenvolver um sistema multithread de alerta de incêndios que utilize a rede de
 
 ## 📊 Estado Atual
 
-### ✅ Implementado (92% - Atualizado 26 Fev 2026)
+### ✅ Implementado (Atualizado 26 Abr 2026)
 
 **Core do Sistema:**
 - Arquitetura multithread com 5 workers **✅ THREAD-SAFE**
@@ -68,6 +68,7 @@ Desenvolver um sistema multithread de alerta de incêndios que utilize a rede de
 - Testes de carga e stress
 
 **Dissertação:**
+- Escrita global em curso **(10%)**
 - Revisão bibliográfica completa
 - Diagramas de arquitetura
 - Análise de resultados
@@ -91,100 +92,96 @@ Desenvolver um sistema multithread de alerta de incêndios que utilize a rede de
 
 ## 🚀 Execução
 
-```powershell
-# Instalar dependências
-pip install -r requirements.txt
+### Windows CMD
 
-# Executar sistema
-python main.py
+O fluxo principal deste projeto passa por correr localmente em Windows, no `cmd`, com Python `3.11`.
+
+1. Entrar na pasta do projeto:
+
+```bat
+cd C:\Users\PcVIP\Desktop\Tese\firetec-multithread
 ```
 
-### Execução em Máquina Virtual (VM)
+2. Criar o ambiente virtual em Python 3.11 e ativá-lo:
 
-Para correr exatamente o mesmo código no PC do laboratório e numa VM, configura apenas variáveis de ambiente antes de executar:
-
-**Windows (PowerShell):**
-
-```powershell
-# Switches da rede do laboratório
-$env:FIRETEC_SWITCH_IPS="192.168.0.22,192.168.0.21"
-$env:FIRETEC_SWITCH_PORT="8080"
-
-# Ajuste opcional de performance
-$env:FIRETEC_MAX_WORKERS="5"
-$env:FIRETEC_QUEUE_SIZE="50"
-
-python main.py
+```bat
+python -m venv .venv
+.venv\Scripts\activate
+python -V
 ```
 
-**Linux (Bash):**
+O `python -V` deve mostrar `Python 3.11.x`.
 
-```bash
-# Switches da rede do laboratório
-export FIRETEC_SWITCH_IPS="192.168.0.22,192.168.0.21"
-export FIRETEC_SWITCH_PORT="8080"
+3. Instalar dependências:
 
-# Ajuste opcional de performance
-export FIRETEC_MAX_WORKERS="5"
-export FIRETEC_QUEUE_SIZE="50"
-
-python main.py
-```
-
-Variáveis suportadas:
-- `FIRETEC_SWITCH_IPS` (lista separada por vírgulas)
-- `FIRETEC_SWITCH_PORT` (porta TCP)
-- `FIRETEC_MAX_WORKERS`
-- `FIRETEC_QUEUE_SIZE`
-
-Nota de rede para VM:
-- Usa adaptador em `Bridged` (não `NAT`) para a VM conseguir alcançar os switches físicos na LAN.
-
-### Preparar imagem VM no teu PC (sem hardware)
-
-Objetivo: criar uma imagem que no laboratório seja só importar e correr.
-
-1. Criar VM local (Ubuntu 24.04 LTS) e clonar este repositório.
-2. Instalar dependências base do Ubuntu (uma vez):
-
-```bash
-sudo apt update
-sudo apt install -y python3 python3-venv python3-pip git
-```
-
-3. Na raiz do projeto, criar ambiente virtual e instalar dependências:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
+```bat
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-4. Criar `.env` a partir de `.env.example`:
+4. Garantir que os ficheiros de dados existem em `data\`:
+- `123.csv`
+- `Localidades_Portugal.csv`
+- `roads_portugal.csv`
 
-```bash
-cp .env.example .env
+Se ainda não existir `roads_portugal.csv`, gera-o a partir do GeoPackage da Geofabrik:
+
+```bat
+python scripts\build_roads_csv.py --input data\portugal.gpkg --output data\roads_portugal.csv
 ```
 
-5. Testar arranque local (sempre pelo mesmo comando):
+5. Correr o sistema:
 
-```bash
-source .venv/bin/activate
+```bat
 python main.py
 ```
 
-6. Depois de validado, desligar a VM e exportar para `OVA/OVF`.
-7. No laboratório: importar imagem, abrir terminal na pasta do projeto e correr:
+### Windows CMD Sem Hardware
 
-```bash
-source .venv/bin/activate
+Para desenvolvimento normal, testes do menu e processamento sem switch físico:
+
+```bat
+set FIRETEC_HARDWARE_ENABLED=false
+set FIRETEC_MAX_WORKERS=5
+set FIRETEC_QUEUE_SIZE=50
+
 python main.py
 ```
 
-Se fores testar com hardware no laboratório:
-- confirmar `FIRETEC_SWITCH_IPS` e `FIRETEC_SWITCH_PORT`
-- usar rede `Bridged`
+### Windows CMD Com Hardware
+
+Para testar com a montagem real no portátil, em Windows `cmd`, com o switch ligado por cabo ao PC:
+
+1. Ligar o switch FireTec ao portátil por cabo de rede.
+2. No adaptador Ethernet do Windows, configurar IPv4 manual para:
+   `192.168.0.10`
+3. Manter a ligação à internet por Wi-Fi ou dados móveis, se precisares dela para o resto do sistema.
+4. Configurar o FireTec para usar os IPs reais dos switches.
+
+Exemplo em `cmd`:
+
+```bat
+set FIRETEC_HARDWARE_ENABLED=true
+set FIRETEC_SWITCH_IPS=192.168.0.22,192.168.0.21
+set FIRETEC_SWITCH_PORT=8080
+set FIRETEC_MAX_WORKERS=5
+set FIRETEC_QUEUE_SIZE=50
+
+python main.py
+```
+
+Notas para a montagem física:
+- O portátil fica com a interface Ethernet em `192.168.0.10`.
+- O switch fica ligado a essa interface por cabo.
+- O Wi-Fi pode continuar ligado para manter internet, desde que a rede local do switch continue a sair pela placa Ethernet.
+- Se fores testar apenas um switch, podes pôr só um IP em `FIRETEC_SWITCH_IPS`.
+
+Variáveis suportadas:
+- `FIRETEC_HARDWARE_ENABLED` (`true` para transmitir para hardware, `false` para simulação)
+- `FIRETEC_SWITCH_IPS` (lista separada por vírgulas)
+- `FIRETEC_SWITCH_PORT` (porta TCP)
+- `FIRETEC_MAX_WORKERS`
+- `FIRETEC_QUEUE_SIZE`
 
 Comando de execução do projeto (em qualquer ambiente):
 - `python main.py`
@@ -210,28 +207,29 @@ Comando de execução do projeto (em qualquer ambiente):
 
 ## 📝 Tarefas Prioritárias
 
-### Até 6 Abril 2026 (Desenvolvimento Técnico)
+### Até 30 Abril 2026
 - [ ] Testes com hardware FireTec real
-- [ ] Automatizar atualização do CSV local de estradas
-- [ ] Métricas de performance finais
-- [ ] Screenshots e vídeos de demonstração
-- [ ] Documentação técnica completa
+- [ ] Validar montagem física em portátil Windows
+- [ ] Recolher screenshots e registos de execução
+- [ ] Fechar notas técnicas para o capítulo de implementação
 
-### 7-21 Abril 2026 (Torneios - Apenas Escrita)
-- [ ] Rascunho de introdução e contexto
-- [ ] Rascunho de estado da arte
-- [ ] Esboço de arquitetura do sistema
-- [ ] Documentação de testes realizados
-
-### 22 Abril - 5 Junho 2026 (Escrita Intensiva)
-- [ ] Introdução e contexto (finalizar)
-- [ ] Estado da arte (finalizar)
+### 1 Maio - 15 Maio 2026
+- [ ] Introdução e contexto
+- [ ] Estado da arte
 - [ ] Arquitetura e implementação
+- [ ] Descrição da pipeline de processamento
+
+### 16 Maio - 31 Maio 2026
 - [ ] Testes e validação
 - [ ] Análise de resultados
 - [ ] Conclusões e trabalho futuro
+- [ ] Revisão bibliográfica final
+- [ ] Consolidar figuras, tabelas e anexos
+
+### 1 Junho - 5 Junho 2026
 - [ ] Revisão completa
 - [ ] Formatação final
+- [ ] Versão final para submissão
 
 ### 6 Junho 2026
 - [ ] **🎯 Entrega da dissertação**
