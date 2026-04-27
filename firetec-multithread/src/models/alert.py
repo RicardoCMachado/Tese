@@ -2,7 +2,7 @@
 Modelos de dados para o sistema FireTec
 """
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 from enum import Enum
 
@@ -99,6 +99,7 @@ class FireAlert:
     message_text: Optional[str] = None
     audio_file: Optional[str] = None
     kml_file: Optional[str] = None
+    transmission_results: Dict[str, dict] = field(default_factory=dict)
 
     # Metadados
     queue_wait_time: Optional[float] = None  # segundos na fila antes de processar

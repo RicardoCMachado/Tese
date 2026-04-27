@@ -8,7 +8,6 @@ from fractions import Fraction
 from pathlib import Path
 from geopy.geocoders import Nominatim
 from polycircles import polycircles
-import overpy
 import requests
 from gtts import gTTS
 import os
@@ -20,6 +19,324 @@ from shapely.geometry import Point, Polygon
 from pydub import AudioSegment
 import time
 from time import sleep
+
+
+BASE_DIR = Path(__file__).resolve().parent
+ROADS_CSV_CANDIDATES = [
+    BASE_DIR / "roads_portugal.csv",
+    BASE_DIR.parent / "firetec-multithread" / "data" / "roads_portugal.csv",
+]
+ROAD_GRID_CELL_DEGREES = 0.05
+INITIAL_ROAD_RADIUS_M = 2000
+ROAD_RADIUS_INCREMENT_M = 500
+MAX_ROAD_RADIUS_M = 6000
+MAX_ROADS_RETURNED = 5
+DEFAULT_SWITCH_PORTS = [8080]  # Ex.: [8081] ou [8081, 8080]
+LOCAL_BIND_IP = None  # Ex.: "192.168.0.20" se quiseres forcar o IP local
+CONNECTION_TIMEOUT_S = 5
+RETRY_ATTEMPTS = 3
+RETRY_DELAY_S = 0.5
+# Protocolo confirmado em laboratorio em 27/04/2026:
+# - switch funcional: 192.168.0.22
+# - porta funcional: 8080
+# - payload: WAV + b"PS=FIRETEC1;" + b"PI=8400;" + b"AF=<freqs>;"
+# - WAV a 32000 Hz com sample width = 1
+
+
+def resolve_roads_csv_path():
+    for candidate in ROADS_CSV_CANDIDATES:
+        if candidate.exists():
+            return candidate
+    return ROADS_CSV_CANDIDATES[-1]
+
+
+def cell_for(latitude, longitude):
+    return (
+        math.floor(latitude / ROAD_GRID_CELL_DEGREES),
+        math.floor(longitude / ROAD_GRID_CELL_DEGREES)
+    )
+
+
+def distance_meters(lat1, lon1, lat2, lon2):
+    radius_m = 6_371_000
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    delta_phi = math.radians(lat2 - lat1)
+    delta_lambda = math.radians(lon2 - lon1)
+
+    a = (
+        math.sin(delta_phi / 2) ** 2 +
+        math.cos(phi1) * math.cos(phi2) *
+        math.sin(delta_lambda / 2) ** 2
+    )
+    return radius_m * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def split_refs(ref):
+    return [
+        item.strip()
+        for item in re.split(r"[;,/]", ref or "")
+        if item.strip()
+    ]
+
+
+def first_matching_ref(refs, pattern):
+    for ref in refs:
+        if re.match(pattern, ref, flags=re.IGNORECASE):
+            return ref
+    return ""
+
+
+def compact_ref(ref):
+    return re.sub(r"\s+", "", ref.strip()).upper()
+
+
+def format_road_label(ref, name, highway):
+    refs = split_refs(ref)
+    motorway_ref = first_matching_ref(refs, r"^A[\s.-]*\d+")
+    national_ref = first_matching_ref(refs, r"^(EN|E\.N\.)[\s.-]*\d+")
+    main_itinerary_ref = first_matching_ref(refs, r"^IP[\s.-]*\d+")
+    complementary_itinerary_ref = first_matching_ref(refs, r"^IC[\s.-]*\d+")
+
+    if motorway_ref:
+        return compact_ref(motorway_ref)
+
+    if national_ref:
+        return compact_ref(national_ref).replace("E.N.", "EN")
+
+    if main_itinerary_ref:
+        return compact_ref(main_itinerary_ref)
+
+    if complementary_itinerary_ref:
+        return compact_ref(complementary_itinerary_ref)
+
+    if name:
+        return name
+
+    return compact_ref(ref) if ref else ""
+
+
+def road_group_key(point):
+    if point["raw_ref"]:
+        return f"ref:{compact_ref(point['raw_ref'])}"
+    return f"name:{point['raw_name'].strip().lower()}"
+
+
+def parse_road_point(row):
+    ref = (row.get("ref") or "").strip()
+    name = (row.get("name") or "").strip()
+    highway = row.get("highway") or "unknown"
+
+    if not ref and not name:
+        return None
+
+    try:
+        latitude = float(row.get("latitude") or row.get("lat"))
+        longitude = float(row.get("longitude") or row.get("lon"))
+    except (TypeError, ValueError):
+        return None
+
+    return {
+        "road_id": row.get("road_id") or row.get("id") or ref or name,
+        "raw_ref": ref,
+        "raw_name": name,
+        "highway": highway,
+        "latitude": latitude,
+        "longitude": longitude,
+    }
+
+
+def load_road_points(path):
+    road_points = []
+    grid_index = {}
+
+    if not path.exists():
+        print(f"[!] Ficheiro de estradas nao encontrado: {path}")
+        return road_points, grid_index
+
+    with path.open("r", encoding="utf-8", newline="") as csv_file:
+        reader = csv.DictReader(csv_file)
+        for row in reader:
+            point = parse_road_point(row)
+            if point is None:
+                continue
+
+            index = len(road_points)
+            road_points.append(point)
+            grid_index.setdefault(
+                cell_for(point["latitude"], point["longitude"]),
+                []
+            ).append(index)
+
+    print(f"[+] Carregados {len(road_points)} pontos de estradas locais de {path}")
+    return road_points, grid_index
+
+
+def candidate_road_points(latitude, longitude, radius_m, road_points, grid_index):
+    lat_radius = radius_m / 111_320
+    cos_lat = max(abs(math.cos(math.radians(latitude))), 0.01)
+    lon_radius = radius_m / (111_320 * cos_lat)
+
+    min_cell = cell_for(latitude - lat_radius, longitude - lon_radius)
+    max_cell = cell_for(latitude + lat_radius, longitude + lon_radius)
+
+    points = []
+    for lat_cell in range(min_cell[0], max_cell[0] + 1):
+        for lon_cell in range(min_cell[1], max_cell[1] + 1):
+            for index in grid_index.get((lat_cell, lon_cell), []):
+                points.append(road_points[index])
+
+    return points
+
+
+def find_csv_roads_in_radius(latitude, longitude, radius_m, road_points, grid_index):
+    candidates = candidate_road_points(
+        latitude,
+        longitude,
+        radius_m,
+        road_points,
+        grid_index
+    )
+    nearest_by_road = {}
+
+    for point in candidates:
+        distance = distance_meters(
+            latitude,
+            longitude,
+            point["latitude"],
+            point["longitude"]
+        )
+        if distance > radius_m:
+            continue
+
+        key = road_group_key(point)
+        current = nearest_by_road.setdefault(key, {
+            "distance": float("inf"),
+            "name_distance": float("inf"),
+            "ref": point["raw_ref"],
+            "name": point["raw_name"],
+            "nearest_name": "",
+            "highway": point["highway"],
+        })
+
+        if distance < current["distance"]:
+            current["distance"] = distance
+            current["ref"] = point["raw_ref"]
+            current["name"] = point["raw_name"]
+            current["highway"] = point["highway"]
+
+        if point["raw_name"] and distance < current["name_distance"]:
+            current["name_distance"] = distance
+            current["nearest_name"] = point["raw_name"]
+
+    ordered = sorted(nearest_by_road.values(), key=lambda item: item["distance"])
+    roads = []
+    seen = set()
+
+    for item in ordered:
+        label = format_road_label(
+            item["ref"],
+            item["nearest_name"] or item["name"],
+            item["highway"]
+        )
+        if label and label not in seen:
+            roads.append(label)
+            seen.add(label)
+
+    return roads[:MAX_ROADS_RETURNED]
+
+
+def find_nearby_roads(latitude, longitude, road_points, grid_index):
+    if not road_points:
+        return []
+
+    search_radius = INITIAL_ROAD_RADIUS_M
+    roads = []
+
+    while search_radius <= MAX_ROAD_RADIUS_M:
+        roads = find_csv_roads_in_radius(
+            latitude,
+            longitude,
+            search_radius,
+            road_points,
+            grid_index
+        )
+        if roads:
+            break
+
+        search_radius += ROAD_RADIUS_INCREMENT_M
+
+    return roads
+
+
+ROADS_CSV_PATH = resolve_roads_csv_path()
+ROAD_POINTS, ROAD_GRID_INDEX = load_road_points(ROADS_CSV_PATH)
+SWITCH_TARGETS = [
+    {"host": "192.168.0.22", "ports": list(DEFAULT_SWITCH_PORTS)},
+    {"host": "192.168.0.21", "ports": list(DEFAULT_SWITCH_PORTS)},
+]
+
+
+def transmit_to_firetec_switch(target, payload):
+    host = target["host"]
+    ports = target.get("ports") or list(DEFAULT_SWITCH_PORTS)
+    attempts_total = 0
+    start_time = time.time()
+    last_error = "sem detalhe"
+
+    for port in ports:
+        for attempt in range(1, RETRY_ATTEMPTS + 1):
+            attempts_total += 1
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(CONNECTION_TIMEOUT_S)
+
+            try:
+                if LOCAL_BIND_IP:
+                    sock.bind((LOCAL_BIND_IP, 0))
+
+                print(f"[++] A ligar a {host}:{port} (tentativa {attempt}/{RETRY_ATTEMPTS})")
+                sock.connect((host, port))
+                print(f"[+] Ligacao estabelecida -> {host}:{port}")
+
+                print("[++] Enviando dados para o Firetec Switch")
+                sock.sendall(payload)
+
+                duration = time.time() - start_time
+                print(f"[+] Envio concluido para {host}:{port} em {duration:.2f}s")
+                return {
+                    "host": host,
+                    "port": port,
+                    "success": True,
+                    "attempts": attempts_total,
+                    "duration": duration,
+                    "error": None,
+                }
+
+            except socket.timeout:
+                last_error = f"Timeout ao conectar a {host}:{port}"
+                print(f"[!] {last_error}")
+            except socket.error as exc:
+                last_error = f"Erro de socket em {host}:{port}: {exc}"
+                print(f"[!] {last_error}")
+            finally:
+                try:
+                    sock.close()
+                except Exception:
+                    pass
+
+            if attempt < RETRY_ATTEMPTS:
+                sleep(RETRY_DELAY_S)
+
+    duration = time.time() - start_time
+    print(f"[!] Switch {host} falhou apos {attempts_total} tentativas")
+    return {
+        "host": host,
+        "port": None,
+        "success": False,
+        "attempts": attempts_total,
+        "duration": duration,
+        "error": last_error,
+    }
 
 
 # criar objeto kml
@@ -300,77 +617,20 @@ while TRUE:
 
     ######################################################################################
     ## Encontrar as Estradas num circulo de raio dinâmico do Local do Alerta
-    # Usar overpass API para enviar o query e obter a informaçao dos servidores em json format 
-    # e posteriormente extrair para ficheiros csv
+    # Usa o CSV local roads_portugal.csv em vez do Overpass API.
     print("[+]Procurar Estradas Próximas ao Local do Alerta")
-    raio = str(2000)	
-    num_road = 0
-    name_road = []
+    name_road = find_nearby_roads(
+        float(latitude),
+        float(longitude),
+        ROAD_POINTS,
+        ROAD_GRID_INDEX
+    )
 
-
-    while num_road <1:
-        
-        while True:     # caso o ficheiro criado esteja vazio aumenta o raio e sai deste while
-            api = overpy.Overpass()
-            result = api.query("""(
-                way
-                (around:"""+raio+""","""+str(latitude)+""","""+str(longitude)+""")
-                [highway~"^(motorway|trunk|primary|secondary|tertiary)$"];
-            >;);out;""")
-
-            list_node_tags = []
-            for way in result.ways:
-                way.tags['id'] = way.id
-                list_node_tags.append(way.tags)
-            data_frame = pd.DataFrame(list_node_tags)
-            data_frame.to_csv('road_name.csv')
-            #print("\nFoi criado o ficheiro - road_name.csv - no atual diretorio.")
-
-            road = pd.read_csv("road_name.csv")
-                #print(road)
-                #print(raio)
-
-                # sair do while True caso o ficheiros csv criado esteja vazio e 
-                # aumentamos o raio para nova tentativa
-            if (len(road)== 0):
-                raio = str(int(raio)+500)
-                break  
-
-                # pode ser craido um ficheiro com informação mas 
-                # não tem a informação que queremos
-            try:
-
-                    # o ficheiro criado não está vazio 
-                    # verificar se neste temos mais de 2 estradas
-                    # retiramos a coluna 'ref' do ficheiro que contem o nome da estrada
-                road_ref = road["ref"].tolist()
-                    # Verificamos se é um nome válido ou nulo
-                cnt = pd.isnull(road["ref"])
-
-                
-                    # Apenas contamos nomes válidos e guardamos numa variável para verificar
-                    # se é igual ao anterior guardado
-                for i in range(len(road_ref)):
-                    if cnt[i] == False:
-                        if (road_ref[i] in name_road):
-                            pass
-                        else:
-                            name_road.append(road_ref[i])
-                            num_road = num_road+1
-                
-                    #print(name_road)
-                    #print(num_road)
-                if (num_road <2):
-                    raio = str(int(raio)+500)
-                else:
-                    break
-            except:
-                    #print("Foi criado um ficheiro sem a coluna 'ref', o raio será aumentado")
-                raio = str(int(raio)+500)
-
-    alert = alert+ ", cuidado ao circular na estrada "
-    for i in range(num_road):
-        alert = alert+name_road[i]+", " 
+    if name_road:
+        print("[+] Estradas encontradas no CSV local: " + ", ".join(name_road))
+        alert = alert + ", cuidado ao circular na estrada " + ", ".join(name_road)
+    else:
+        print("[!] Nenhuma estrada encontrada no CSV local.")
 
     
     print('\nMensagem de Alerta Gerada:')
@@ -403,56 +663,25 @@ while TRUE:
 
             
     data=wav_data +ps+ b';'+ pi+b';'+af+b';'
-    #Configurar o IP do 1ª FireTec Switch
-    #host= '192.168.81.183'     
-    host= '192.168.0.22'
-    port = 8080
-    #host = socket.gethostname()
-    #port = 5000  # initiate port no above 1024
+    print(f"[+] Payload preparado | WAV={len(wav_data)} bytes | total={len(data)} bytes")
 
-    Server_socket = socket.socket() # "Create_Socket()"
-    print("[++]Create_Socket() ....") 
-    print("[++]Tries connection...") 
-    connected = False
-    while connected != True:
-        try:
-            Server_socket.connect((host, port))
-            connected = True
-            print("[+]New Firetec Swicth connection established ->"+ host) 
-        except socket.error:
-            sleep(0.1)
+    transmission_results = []
+    for target in SWITCH_TARGETS:
+        transmission_results.append(
+            transmit_to_firetec_switch(target, data)
+        )
 
-    #------ [Send & Receive] ------------
-    print("[++]Sending data to Firetec Swicth ")
-    Server_socket.sendall(data)  # send data to the client
-
-    #------------------------------------------------ 
-    print("[++]Closing Socket ....")
-    Server_socket.close()  # close the connection
-    #Configurar o IP do 2ª FireTec Switch
-    #host= '192.168.81.189'     
-    host= '192.168.0.21'
-    port = 8080
-    #host = socket.gethostname()
-    #port = 5000  # initiate port no above 1024
-
-    Server_socket = socket.socket() # "Create_Socket()"
-    print("[++]Create_Socket() ....") 
-    print("[++]Tries connection...") 
-    connected = False
-    while connected != True:
-        try:
-            Server_socket.connect((host, port))
-            connected = True
-            print("[+]New Firetec Swicth connection established ->"+ host) 
-        except socket.error:
-            sleep(0.1)
-
-    #------ [Send & Receive] ------------
-    print("[++]Sending data to Firetec Swicth ")
-    Server_socket.sendall(data)  # send data to the client
-
-    #------------------------------------------------ 
-    print("[++]Closing Socket ....")
-    Server_socket.close()  # close the connection
+    success_count = sum(1 for result in transmission_results if result["success"])
+    print(f"[+] Resumo transmissao: {success_count}/{len(transmission_results)} switches OK")
+    for result in transmission_results:
+        if result["success"]:
+            print(
+                f"    - {result['host']} OK em {result['port']} "
+                f"({result['duration']:.2f}s)"
+            )
+        else:
+            print(
+                f"    - {result['host']} FALHOU "
+                f"({result['error']})"
+            )
 

@@ -55,6 +55,8 @@ class MainMenu:
                 self._show_status()
             elif choice == "5":
                 self._show_statistics()
+            elif choice == "6":
+                self._test_switches()
             elif choice == "0":
                 self.running = False
             else:
@@ -88,6 +90,7 @@ class MainMenu:
             "  4  Ver estado dos alertas",
             "  5  Ver estatísticas do sistema",
             "",
+            "  6  Testar ligacao aos switches",
             "  0  Sair",
             "=" * 64,
         ]
@@ -255,6 +258,45 @@ class MainMenu:
             f"Localidades: {len(self.processor.location_service.localities_data)}\n"
             f"Pontos de estrada: {len(self.processor.road_service.road_points)}"
         )
+
+    def _test_switches(self):
+        """Testa ligacao TCP aos switches configurados."""
+        if not self.processor.config.hardware_enabled:
+            self.emit_message(
+                "\nTESTE DE SWITCHES\n"
+                + "=" * 64 + "\n"
+                "Hardware OFF. Define FIRETEC_HARDWARE_ENABLED=true para testar."
+            )
+            return
+
+        self.emit_message(
+            "\nTESTE DE SWITCHES\n"
+            + "=" * 64 + "\n"
+            "A testar ligacao TCP aos switches configurados..."
+        )
+
+        results = self.processor.transmission_service.test_all_switches()
+        available = sum(1 for status in results.values() if status)
+
+        lines = [
+            "",
+            "RESULTADO DO TESTE DE SWITCHES",
+            "=" * 64,
+            f"Switches acessiveis: {available}/{len(results)}",
+        ]
+
+        for switch_ip, is_available in results.items():
+            state = "OK" if is_available else "FALHOU"
+            lines.append(f"  {switch_ip}: {state}")
+
+        if available == 0:
+            lines.append("Nenhum switch respondeu ao teste de ligacao.")
+        elif available < len(results):
+            lines.append("Ligacao parcial: pelo menos um switch nao respondeu.")
+        else:
+            lines.append("Todos os switches responderam ao teste de ligacao.")
+
+        self.emit_message("\n".join(lines))
 
     def _ask_priority(self) -> AlertPriority:
         choice = self._prompt("Prioridade (1=Normal, 2=Alta, 3=Crítica) [1]: ").strip() or "1"

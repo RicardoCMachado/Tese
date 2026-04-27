@@ -287,6 +287,7 @@ class AlertProcessor:
                         alert,
                         audio_bytes
                     )
+                    alert.transmission_results = transmission_results
                     metrics.transmission_time = time.time() - start
 
                     # Verificar se transmissão foi bem sucedida

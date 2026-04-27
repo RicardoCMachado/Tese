@@ -17,6 +17,8 @@
 
 > **Estado a 26 Abril 2026:** sistema funcional para testes locais e com preparação para hardware; foco principal atual na redação da dissertação até à entrega de 6 Junho 2026.
 
+> **Confirmação de laboratório a 27 Abril 2026:** a cadeia de transmissão foi confirmada com sucesso no switch `192.168.0.22`. Protocolo confirmado: ligação TCP ao switch na porta `8080`, envio de `WAV bytes + b"PS=FIRETEC1;" + b"PI=8400;" + b"AF=<freqs>;"`, com o WAV gerado a partir de MP3 TTS e convertido para `32000 Hz` com `sample width = 1`. O switch `192.168.0.21` continua sem responder e não deve bloquear os testes.
+
 ---
 
 ## 🎯 Objetivos
@@ -175,6 +177,14 @@ Notas para a montagem física:
 - O switch fica ligado a essa interface por cabo.
 - O Wi-Fi pode continuar ligado para manter internet, desde que a rede local do switch continue a sair pela placa Ethernet.
 - Se fores testar apenas um switch, podes pôr só um IP em `FIRETEC_SWITCH_IPS`.
+
+Configuração confirmada em laboratório:
+- Switch funcional confirmado: `192.168.0.22`
+- Porta funcional confirmada: `8080`
+- Payload funcional confirmado: `WAV + PS=FIRETEC1; + PI=8400; + AF=<frequências>;`
+- Frequências AF no payload: frequências das antenas encontradas + `100.0` e `102.0`
+- Formato áudio funcional confirmado: WAV derivado de MP3 TTS, `32000 Hz`, `sample width = 1`
+- Estado atual do segundo switch: `192.168.0.21` faz timeout e deve ser tratado como indisponível até nova validação
 
 Variáveis suportadas:
 - `FIRETEC_HARDWARE_ENABLED` (`true` para transmitir para hardware, `false` para simulação)
